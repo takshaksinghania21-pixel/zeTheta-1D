@@ -1,0 +1,366 @@
+{
+  "runAt": "2026-10-11T14:07:53.698Z",
+  "baseUrl": "http://localhost:3000",
+  "passed": 15,
+  "failed": 0,
+  "steps": [
+    {
+      "step": 1,
+      "name": "Create a synthetic test user",
+      "ok": true,
+      "detail": {
+        "status": 201,
+        "userId": "83191e8f-13c3-4edd-b5c4-6a60d6ac9d43"
+      },
+      "ms": 16
+    },
+    {
+      "step": 2,
+      "name": "Configure preferences (quiet hours off, push+email+in-app)",
+      "ok": true,
+      "detail": {
+        "version": 3,
+        "sources": {
+          "channels.sms": "USER",
+          "channels.email": "USER",
+          "channels.push": "USER",
+          "channels.whatsapp": "SYSTEM",
+          "channels.inapp": "USER",
+          "categories.TRANSACTION": "SYSTEM",
+          "categories.RISK": "SYSTEM",
+          "categories.SIP": "SYSTEM",
+          "categories.MARKET": "SYSTEM",
+          "categories.REGULATORY": "SYSTEM",
+          "digest": "SYSTEM",
+          "quietHours": "USER",
+          "timezone": "USER",
+          "locale": "SYSTEM"
+        }
+      },
+      "ms": 10
+    },
+    {
+      "step": 3,
+      "name": "Submit a valid financial event (202 Accepted)",
+      "ok": true,
+      "detail": {
+        "eventId": "574768ec-d695-416c-a365-8ec418c7384a",
+        "status": "ACCEPTED",
+        "idempotencyKey": "TXNX-001:83191e8f-13c3-4edd-b5c4-6a60d6ac9d43:SMOKE-57f044cd-1",
+        "statusUrl": "/api/v1/events/574768ec-d695-416c-a365-8ec418c7384a"
+      },
+      "ms": 4
+    },
+    {
+      "step": 4,
+      "name": "Event processed asynchronously (Kafka → consumer)",
+      "ok": true,
+      "detail": {
+        "status": "PROCESSED",
+        "notifications": 3
+      },
+      "ms": 510
+    },
+    {
+      "step": 5,
+      "name": "Routing and compliance decisions recorded",
+      "ok": true,
+      "detail": {
+        "transactional": [
+          "push:CONSENT_IMPLIED:ALLOW",
+          "email:CONSENT_IMPLIED:ALLOW",
+          "inapp:CONSENT_IMPLIED:ALLOW",
+          "-:FREQUENCY_CAP_EXEMPT:ALLOW"
+        ],
+        "promotionalDryRun": [
+          "PROMOTIONAL_CONSENT_REQUIRED",
+          "PROMOTIONAL_CONSENT_REQUIRED",
+          "CONSENT_IMPLIED"
+        ]
+      },
+      "ms": 5
+    },
+    {
+      "step": 6,
+      "name": "Templates rendered per channel",
+      "ok": true,
+      "detail": [
+        "push: Buy order executed: INFY",
+        "email: Buy order executed: INFY",
+        "inapp: Buy order executed: INFY"
+      ],
+      "ms": 0
+    },
+    {
+      "step": 7,
+      "name": "Mock providers received the delivery requests (SENT)",
+      "ok": true,
+      "detail": [
+        "push:DELIVERED:mock-push",
+        "email:DELIVERED:mock-email",
+        "inapp:SENT:socketio"
+      ],
+      "ms": 9
+    },
+    {
+      "step": 8,
+      "name": "Delivery status persisted (receipts → DELIVERED via signed webhook)",
+      "ok": true,
+      "detail": {
+        "states": [
+          "push:DELIVERED",
+          "email:DELIVERED",
+          "inapp:SENT"
+        ],
+        "delivery": {
+          "notificationId": "19c502f6-ff3e-4485-81b2-17d428a1d414",
+          "state": "DELIVERED",
+          "provider": "mock-push",
+          "providerMessageId": "mock-push-0e7de1ca-040f-4cb3-af56-01035cad7b15",
+          "providerStatus": {
+            "status": "DELIVERED"
+          },
+          "lastAttempt": {
+            "id": "2e606cf5-341a-49ec-8e57-7246e29d0c83",
+            "attemptNumber": 1,
+            "provider": "mock-push",
+            "channel": "push",
+            "status": "SUCCESS",
+            "errorKind": null,
+            "errorCode": null,
+            "errorMessage": null,
+            "providerMessageId": "mock-push-0e7de1ca-040f-4cb3-af56-01035cad7b15",
+            "costMicros": 0,
+            "startedAt": "2026-10-11T14:06:58.823Z",
+            "completedAt": "2026-10-11T14:06:58.826Z",
+            "latencyMs": 1
+          }
+        }
+      },
+      "ms": 7
+    },
+    {
+      "step": 9,
+      "name": "State history recorded",
+      "ok": true,
+      "detail": "CREATED > ENRICHED > ROUTED > QUEUED > SENT > DELIVERED",
+      "ms": 3
+    },
+    {
+      "step": 10,
+      "name": "Simulate a provider failure (mock-push: 2 transient failures)",
+      "ok": true,
+      "detail": {
+        "simulate": {
+          "provider": "mock-push",
+          "mode": "fail_transient",
+          "remaining": 2
+        }
+      },
+      "ms": 8
+    },
+    {
+      "step": 11,
+      "name": "Retry with backoff recovers the delivery",
+      "ok": true,
+      "detail": {
+        "retryCount": 2,
+        "attempts": [
+          "FAILED:MOCK_503",
+          "FAILED:MOCK_503",
+          "SUCCESS:"
+        ],
+        "history": "CREATED>ENRICHED>ROUTED>QUEUED>RETRYING>RETRYING>SENT>DELIVERED"
+      },
+      "ms": 4578
+    },
+    {
+      "step": 12,
+      "name": "Exhaust retries → DLQ (mock-email failing permanently-transient, HIGH: 5 retries)",
+      "ok": true,
+      "detail": {
+        "state": "DLQ",
+        "retryCount": 5,
+        "dlq": {
+          "id": "84e6cb9c-783b-4d2b-af8b-b8e72081df6f",
+          "source": "DELIVERY",
+          "notificationId": "2f76b8cc-df68-4c06-b8ba-1c31a3113dc4",
+          "eventId": "026f1fa7-9313-4f02-86dc-4f54e0386992",
+          "channel": "email",
+          "reasonCode": "RETRIES_EXHAUSTED",
+          "reasonMessage": "Delivery failed after 5 retries: NO_PROVIDER_AVAILABLE",
+          "attempts": 5,
+          "retryHistory": [
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-11T14:07:03.970Z",
+              "attempt_number": 1
+            },
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-11T14:07:05.721Z",
+              "attempt_number": 2
+            },
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-11T14:07:08.182Z",
+              "attempt_number": 3
+            },
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-11T14:07:12.538Z",
+              "attempt_number": 4
+            },
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-11T14:07:21.289Z",
+              "attempt_number": 5
+            }
+          ],
+          "payload": {
+            "channel": "email",
+            "priority": "HIGH",
+            "createdAt": "2026-10-11T14:07:03.950Z",
+            "eventType": "TXNX-001",
+            "notificationId": "2f76b8cc-df68-4c06-b8ba-1c31a3113dc4"
+          },
+          "status": "OPEN",
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "resolutionNote": null,
+          "createdAt": "2026-10-11T14:07:37.804Z",
+          "updatedAt": "2026-10-11T14:07:37.804Z"
+        }
+      },
+      "ms": 34239
+    },
+    {
+      "step": 13,
+      "name": "Authorised DLQ retry (operator) re-delivers; unauthorised discard rejected",
+      "ok": true,
+      "detail": {
+        "discardAsOperator": 403,
+        "retry": "RETRIED",
+        "finalState": "DELIVERED"
+      },
+      "ms": 14118
+    },
+    {
+      "step": 14,
+      "name": "Analytics reflect the run (sent, delivered, retries, DLQ)",
+      "ok": true,
+      "detail": {
+        "delivery": [
+          {
+            "channel": "email",
+            "queued": 4,
+            "sent": 3,
+            "delivered": 3,
+            "failed": 0,
+            "dlq": 1,
+            "retries": 6,
+            "acceptanceRate": 0.75,
+            "deliveryRate": 1,
+            "failureRate": 0.25
+          },
+          {
+            "channel": "inapp",
+            "queued": 3,
+            "sent": 3,
+            "delivered": 0,
+            "failed": 0,
+            "dlq": 0,
+            "retries": 0,
+            "acceptanceRate": 1,
+            "deliveryRate": 0,
+            "failureRate": 0
+          },
+          {
+            "channel": "push",
+            "queued": 3,
+            "sent": 3,
+            "delivered": 3,
+            "failed": 0,
+            "dlq": 0,
+            "retries": 2,
+            "acceptanceRate": 1,
+            "deliveryRate": 1,
+            "failureRate": 0
+          }
+        ],
+        "latency": [
+          {
+            "channel": "email",
+            "samples": 3,
+            "sendLatencyMs": {
+              "p50": 29,
+              "p95": 42626,
+              "p99": 46412.4
+            },
+            "deliveryLatencyMs": {
+              "p50": 279,
+              "p95": 42875.1,
+              "p99": 46661.42
+            }
+          },
+          {
+            "channel": "inapp",
+            "samples": 3,
+            "sendLatencyMs": {
+              "p50": 19,
+              "p95": 19.9,
+              "p99": 19.98
+            },
+            "deliveryLatencyMs": {
+              "p50": null,
+              "p95": null,
+              "p99": null
+            }
+          },
+          {
+            "channel": "push",
+            "samples": 3,
+            "sendLatencyMs": {
+              "p50": 34,
+              "p95": 3305.5,
+              "p99": 3596.3
+            },
+            "deliveryLatencyMs": {
+              "p50": 309,
+              "p95": 3558.9,
+              "p99": 3847.78
+            }
+          }
+        ]
+      },
+      "ms": 7
+    },
+    {
+      "step": 15,
+      "name": "Duplicate submission does not create duplicate notifications",
+      "ok": true,
+      "detail": {
+        "duplicate": 200,
+        "conflictingPayload": 409,
+        "before": 3,
+        "after": 3
+      },
+      "ms": 1514
+    }
+  ]
+}

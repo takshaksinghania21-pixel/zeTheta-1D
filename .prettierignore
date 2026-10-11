@@ -1,0 +1,8 @@
+dist
+coverage
+node_modules
+.local
+package-lock.json
+docs/openapi.json
+docs/postman
+reports

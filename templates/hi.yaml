@@ -1,0 +1,108 @@
+# Hindi templates. Machine-assisted translation — must be reviewed by a native
+# speaker / compliance before production use. Falls back to English per event.
+locale: hi
+templates:
+  TXNX-001:
+    title: 'खरीद ऑर्डर पूरा हुआ: {{symbol}}'
+    short: '{{exchange}} पर {{symbol}} के {{quantity}} शेयर {{currency price}} पर खरीदे गए। ऑर्डर {{orderId}}। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nआपका खरीद ऑर्डर {{orderId}} ({{symbol}} के {{quantity}} शेयर) {{date executedAt format='datetime'}} को {{exchange}} पर {{currency price}} प्रति शेयर पर पूरा हुआ।\n\nयदि यह ऑर्डर आपने नहीं दिया है, तो तुरंत सहायता से संपर्क करें।"
+  TXNX-002:
+    title: 'बिक्री ऑर्डर पूरा हुआ: {{symbol}}'
+    short: '{{exchange}} पर {{symbol}} के {{quantity}} शेयर {{currency price}} पर बेचे गए। ऑर्डर {{orderId}}। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nआपका बिक्री ऑर्डर {{orderId}} ({{symbol}} के {{quantity}} शेयर) {{date executedAt format='datetime'}} को {{exchange}} पर {{currency price}} प्रति शेयर पर पूरा हुआ।\n\nयदि यह ऑर्डर आपने नहीं दिया है, तो तुरंत सहायता से संपर्क करें।"
+  TXNX-003:
+    title: 'ऑर्डर अस्वीकृत: {{symbol}}'
+    short: "आपका {{#if (eq side 'BUY')}}खरीद{{else}}बिक्री{{/if}} ऑर्डर {{orderId}} ({{quantity}} {{symbol}}) अस्वीकृत हुआ: {{reason}}। -Zetheta"
+    long: "नमस्ते {{user.name}},\n\nआपका {{#if (eq side 'BUY')}}खरीद{{else}}बिक्री{{/if}} ऑर्डर {{orderId}} ({{exchange}} पर {{symbol}} के {{quantity}} शेयर) {{date rejectedAt format='datetime'}} को अस्वीकृत हुआ।\n\nकारण: {{reason}}\n\nआपके फंड या होल्डिंग पर कोई असर नहीं पड़ा है।"
+  TXNX-004:
+    title: 'लाभांश जमा: {{symbol}}'
+    short: '{{symbol}} से {{currency amount}} का लाभांश आपके बैंक खाते (अंतिम अंक {{bankAccountLast4}}) में जमा हुआ। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{symbol}} से रिकॉर्ड तिथि {{date recordDate}} के लिए {{currency amount}} ({{currency perShare}} प्रति शेयर) का लाभांश {{date creditedAt format='datetime'}} को आपके बैंक खाते (अंतिम अंक {{bankAccountLast4}}) में जमा किया गया।"
+  TXNX-005:
+    title: 'फंड जमा: {{currency amount}}'
+    short: '{{mode}} से {{currency amount}} प्राप्त हुए (संदर्भ {{referenceId}})।{{#if availableBalance}} उपलब्ध शेष: {{currency availableBalance}}।{{/if}} -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nहमें {{date depositedAt format='datetime'}} को {{mode}} के माध्यम से {{currency amount}} प्राप्त हुए। संदर्भ: {{referenceId}}।{{#if availableBalance}}\n\nआपका उपलब्ध शेष अब {{currency availableBalance}} है।{{/if}}"
+  RISK-001:
+    title: 'तत्काल: मार्जिन कॉल'
+    short: "तत्काल मार्जिन कॉल: आवश्यक {{currency marginRequired}}, उपलब्ध {{currency marginAvailable}}। स्क्वेयर-ऑफ से बचने के लिए {{date deadline format='datetime'}} तक फंड जोड़ें। -Zetheta"
+    long: "नमस्ते {{user.name}},\n\nआपके खाते पर मार्जिन कॉल जारी हुई है।\n\nआवश्यक मार्जिन: {{currency marginRequired}}\nउपलब्ध मार्जिन: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% उपयोग)\n\nकृपया {{date deadline format='datetime'}} से पहले फंड जोड़ें या पोज़िशन कम करें, अन्यथा पोज़िशन बिना सूचना के स्क्वेयर-ऑफ की जा सकती हैं।"
+  RISK-002:
+    title: 'तत्काल: मार्जिन की कमी {{currency shortfallAmount}}'
+    short: "तत्काल: {{currency shortfallAmount}} की मार्जिन कमी। {{date deadline format='datetime'}} तक फंड जोड़ें, वरना पोज़िशन स्क्वेयर-ऑफ हो सकती हैं। -Zetheta"
+    long: "नमस्ते {{user.name}},\n\nआपके खाते में {{currency shortfallAmount}} की मार्जिन कमी है।\n\nआवश्यक मार्जिन: {{currency marginRequired}}\nउपलब्ध मार्जिन: {{currency marginAvailable}}\n\nस्क्वेयर-ऑफ से बचने के लिए कृपया {{date deadline format='datetime'}} से पहले कमी पूरी करें।"
+  RISK-003:
+    title: 'पोज़िशन स्क्वेयर-ऑफ: {{symbol}}'
+    short: '{{symbol}} के {{quantity}} शेयर {{currency price}} पर स्क्वेयर-ऑफ हुए ({{reason}})। लाभ/हानि: {{currency realisedPnl}}। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{symbol}} की आपकी {{quantity}} शेयरों की पोज़िशन {{date squaredOffAt format='datetime'}} को {{currency price}} पर स्क्वेयर-ऑफ की गई।\n\nकारण: {{reason}}\nवास्तविक लाभ/हानि: {{currency realisedPnl}}\n\nऑर्डर संदर्भ: {{orderId}}।"
+  RISK-004:
+    title: 'पोर्टफोलियो जोखिम अलर्ट: {{metric}}'
+    short: 'आपके पोर्टफोलियो का {{metric}} {{number value decimals=2}} है, जो आपकी सीमा {{number threshold decimals=2}} से अधिक है। कृपया समीक्षा करें। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nआपके पोर्टफोलियो का {{metric}} {{number value decimals=2}} पर पहुँच गया है, जो आपकी अलर्ट सीमा {{number threshold decimals=2}} से अधिक है।{{#if portfolioValue}}\n\nवर्तमान पोर्टफोलियो मूल्य: {{currency portfolioValue}}।{{/if}}\n\nकृपया अपनी पोज़िशन की समीक्षा करें।"
+  RISK-005:
+    title: 'एकाग्रता अलर्ट: {{holding}}'
+    short: '{{holding}} आपके पोर्टफोलियो का {{percent concentrationPercent}} है (सीमा {{percent thresholdPercent}})। विविधीकरण पर विचार करें। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{date asOf}} तक {{holding}} आपके पोर्टफोलियो का {{percent concentrationPercent}} है, जो आपकी सीमा {{percent thresholdPercent}} से अधिक है।\n\nविविध पोर्टफोलियो जोखिम कम कर सकता है।"
+  SIPX-001:
+    title: 'SIP देय तिथि {{date dueDate}}'
+    short: '{{fundName}} में {{currency amount}} की आपकी SIP {{date dueDate}} को देय है। कृपया पर्याप्त शेष रखें। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{fundName}} में {{currency amount}} की आपकी SIP {{date dueDate}} को देय है।\n\nकिस्त विफल होने से बचने के लिए कृपया लिंक किए गए बैंक खाते में पर्याप्त शेष रखें।"
+  SIPX-002:
+    title: 'SIP पूरी हुई: {{fundName}}'
+    short: '{{fundName}} में {{currency amount}} की SIP पूरी: {{number units}} यूनिट, NAV {{currency nav}}। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{fundName}} में {{currency amount}} की आपकी SIP किस्त {{date executedAt format='datetime'}} को पूरी हुई।\n\nआवंटित यूनिट: {{number units}}\nNAV: {{currency nav}}"
+  SIPX-003:
+    title: 'SIP विफल: {{fundName}}'
+    short: '{{fundName}} में {{currency amount}} की आपकी SIP विफल हुई: {{reason}}।{{#if nextAttemptDate}} अगला प्रयास {{date nextAttemptDate}} को।{{/if}} -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{fundName}} में {{currency amount}} की आपकी SIP किस्त {{date failedAt format='datetime'}} को संसाधित नहीं हो सकी।\n\nकारण: {{reason}}{{#if nextAttemptDate}}\n\nहम {{date nextAttemptDate}} को फिर प्रयास करेंगे।{{/if}}\n\nकृपया अपना बैंक शेष और मैंडेट स्थिति जाँचें।"
+  SIPX-004:
+    title: '{{fundName}} में अपनी SIP बढ़ाएँ'
+    short: '{{date effectiveDate}} से अपनी {{fundName}} SIP {{currency currentAmount}} से बढ़ाकर {{currency suggestedAmount}} करें। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nआप {{date effectiveDate}} से {{fundName}} में अपनी SIP {{currency currentAmount}} से बढ़ाकर {{currency suggestedAmount}} कर सकते हैं।\n\nम्यूचुअल फंड निवेश बाज़ार जोखिमों के अधीन हैं। सभी योजना संबंधी दस्तावेज़ ध्यान से पढ़ें।"
+  SIPX-005:
+    title: 'लक्ष्य पड़ाव: {{goalName}} का {{milestonePercent}}%'
+    short: 'आपने अपने लक्ष्य {{goalName}} का {{milestonePercent}}% हासिल कर लिया है: {{currency targetValue}} में से {{currency currentValue}}। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nबधाई हो! आपका लक्ष्य {{goalName}} {{milestonePercent}}% पूरा हो गया है।\n\nवर्तमान मूल्य: {{currency currentValue}}\nलक्ष्य: {{currency targetValue}}"
+  MKTX-001:
+    title: "मूल्य अलर्ट: {{symbol}} {{currency triggerPrice}} से {{#if (eq direction 'ABOVE')}}ऊपर{{else}}नीचे{{/if}}"
+    short: "मूल्य अलर्ट: {{symbol}} ({{exchange}}) {{currency currentPrice}} पर है, आपके ट्रिगर {{currency triggerPrice}} से {{#if (eq direction 'ABOVE')}}ऊपर{{else}}नीचे{{/if}}। -Zetheta"
+    long: "नमस्ते {{user.name}},\n\nआपका मूल्य अलर्ट {{alertId}} {{date triggeredAt format='datetime'}} को ट्रिगर हुआ।\n\n{{symbol}} ({{exchange}}) {{currency currentPrice}} पर ट्रेड कर रहा है, जो आपके ट्रिगर मूल्य {{currency triggerPrice}} से {{#if (eq direction 'ABOVE')}}ऊपर{{else}}नीचे{{/if}} है।"
+  MKTX-002:
+    title: 'सर्किट लगा: {{symbol}}'
+    short: "{{exchange}} पर {{symbol}} में {{#if (eq circuitType 'UPPER')}}अपर{{else if (eq circuitType 'LOWER')}}लोअर{{else}}मार्केट-वाइड{{/if}} सर्किट ({{percent limitPercent}}) लगा। -Zetheta"
+    long: "नमस्ते {{user.name}},\n\n{{date hitAt format='datetime'}} को {{exchange}} पर {{symbol}} में {{percent limitPercent}} की {{#if (eq circuitType 'UPPER')}}अपर{{else if (eq circuitType 'LOWER')}}लोअर{{else}}मार्केट-वाइड{{/if}} सर्किट सीमा लगी।\n\nसर्किट हटने तक ट्रेडिंग प्रतिबंधित हो सकती है।"
+  MKTX-003:
+    title: "{{exchange}} {{#if (eq session 'OPEN')}}बाज़ार खुला{{else if (eq session 'CLOSE')}}बाज़ार बंद{{else}}प्री-ओपन सत्र{{/if}}"
+    short: "{{exchange}} {{#if (eq session 'OPEN')}}बाज़ार खुला{{else if (eq session 'CLOSE')}}बाज़ार बंद हुआ{{else}}प्री-ओपन शुरू हुआ{{/if}}: {{date at format='time'}}।{{#if changePercent}} {{indexName}}: {{percent changePercent}}।{{/if}} -Zetheta"
+    long: "नमस्ते {{user.name}},\n\n{{date at}} को {{date at format='time'}} पर {{exchange}} {{#if (eq session 'OPEN')}}बाज़ार खुला{{else if (eq session 'CLOSE')}}बाज़ार बंद हुआ{{else}}प्री-ओपन सत्र शुरू हुआ{{/if}}।{{#if changePercent}}\n\n{{indexName}} में बदलाव: {{percent changePercent}}।{{/if}}"
+  MKTX-004:
+    title: "{{symbol}} 52-सप्ताह के {{#if (eq extreme 'HIGH')}}उच्च{{else}}निम्न{{/if}} स्तर पर"
+    short: "{{exchange}} पर {{symbol}} ने {{currency price}} का 52-सप्ताह का {{#if (eq extreme 'HIGH')}}उच्च{{else}}निम्न{{/if}} स्तर छुआ। -Zetheta"
+    long: "नमस्ते {{user.name}},\n\n{{date tradeDate}} को {{exchange}} पर {{symbol}} ने {{currency price}} का 52-सप्ताह का {{#if (eq extreme 'HIGH')}}उच्च{{else}}निम्न{{/if}} स्तर छुआ।\n\nप्रतिभूतियों में निवेश बाज़ार जोखिमों के अधीन है।"
+  MKTX-005:
+    title: 'नतीजे: {{companyName}} {{quarter}}'
+    short: '{{companyName}} ({{symbol}}) {{date announcementDate}} को {{quarter}} के नतीजे घोषित करेगी। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{companyName}} ({{symbol}}) {{date announcementDate}} को अपने {{quarter}} के नतीजे घोषित करेगी।\n\nप्रतिभूतियों में निवेश बाज़ार जोखिमों के अधीन है।"
+  REGX-001:
+    title: 'KYC {{daysRemaining}} दिनों में समाप्त'
+    short: 'आपका KYC {{date expiryDate}} को समाप्त हो रहा है ({{daysRemaining}} दिन)। खाते पर प्रतिबंध से बचने के लिए इसे अपडेट करें। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nआपका {{kycType}} KYC {{date expiryDate}} को समाप्त हो रहा है ({{daysRemaining}} दिन शेष)।\n\nखाते पर प्रतिबंध से बचने के लिए कृपया अपना KYC अपडेट करें।"
+  REGX-002:
+    title: 'अपने नामांकित व्यक्ति का विवरण अपडेट करें'
+    short: 'कृपया {{date dueDate}} तक अपने {{accountType}} खाते के लिए नामांकित व्यक्ति का विवरण जोड़ें या पुष्टि करें। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nकृपया {{date dueDate}} तक अपने {{accountType}} खाते के लिए नामांकित व्यक्ति का विवरण जोड़ें या पुष्टि करें।\n\nआप ऐप के प्रोफ़ाइल अनुभाग से इसे अपडेट कर सकते हैं।"
+  REGX-003:
+    title: 'कॉन्ट्रैक्ट नोट {{contractNoteId}}'
+    short: '{{date tradeDate}} के ट्रेड के लिए कॉन्ट्रैक्ट नोट {{contractNoteId}} उपलब्ध है। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{date tradeDate}} के आपके ट्रेड के लिए कॉन्ट्रैक्ट नोट {{contractNoteId}} तैयार हो गया है।\n\nडाउनलोड: {{documentUrl}}"
+  REGX-004:
+    title: 'वित्त वर्ष {{financialYear}} का कर विवरण'
+    short: 'वित्त वर्ष {{financialYear}} का आपका {{statementType}} विवरण उपलब्ध है। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\nवित्त वर्ष {{financialYear}} का आपका {{statementType}} विवरण तैयार है।\n\nडाउनलोड: {{documentUrl}}"
+  REGX-005:
+    title: 'नीति अपडेट: {{policyTitle}}'
+    short: '{{date effectiveDate}} से प्रभावी नीति अपडेट: {{policyTitle}}। -Zetheta'
+    long: "नमस्ते {{user.name}},\n\n{{policyTitle}} ({{date effectiveDate}} से प्रभावी)\n\n{{summary}}{{#if referenceUrl}}\n\nविवरण: {{referenceUrl}}{{/if}}"
+  SYS-DIGEST:
+    title: 'आपके {{count}} अपडेट'
+    short: 'आपके {{count}} अपडेट: {{#each items}}{{title}}; {{/each}}-Zetheta'
+    long: "नमस्ते {{user.name}},\n\nआपके {{count}} अपडेट का सारांश:\n\n{{#each items}}- {{title}}\n{{/each}}\nविवरण के लिए ऐप खोलें।"

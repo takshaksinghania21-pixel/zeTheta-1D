@@ -1,0 +1,554 @@
+# =============================================================================
+# Zetheta BE-6B — Financial event taxonomy (version-controlled source of truth)
+# =============================================================================
+# Provenance legend (see docs/TAXONOMY.md):
+#   ASSIGNMENT  value supplied verbatim by the BE-6B assignment brief
+#               (event codes, names and the five categories).
+#   DEFAULT     application default chosen by this implementation. NOT a
+#               regulatory mandate. Priorities, regulatory classes, channel
+#               sets, mandatory-channel overrides and latency objectives MUST be
+#               reviewed by compliance before production use.
+#
+# Adding an event type: append an entry below, add templates for it in
+# templates/<locale>.yaml (English is mandatory, others fall back to English),
+# run `npm test`. No routing-engine code changes are required: routing,
+# compliance, caps, quiet hours and retries are all driven by these fields.
+#
+# Field types for `payload`: string | integer | number | decimal | enum |
+#   date (YYYY-MM-DD) | datetime (ISO-8601 with offset) | boolean | url (https)
+# =============================================================================
+version: 3
+provenance:
+  codes: ASSIGNMENT
+  names: ASSIGNMENT
+  categories: ASSIGNMENT
+  priority: DEFAULT
+  regulatoryClass: DEFAULT
+  channels: DEFAULT
+  mandatoryChannels: DEFAULT
+  latencyObjectiveMs: DEFAULT
+  quietHours: DEFAULT
+  frequencyCapExempt: DEFAULT
+
+categories:
+  TRANSACTION: { prefix: TXNX, name: Transaction events }
+  RISK: { prefix: RISK, name: Risk and margin events }
+  SIP: { prefix: SIPX, name: SIP and investment events }
+  MARKET: { prefix: MKTX, name: Market and price events }
+  REGULATORY: { prefix: REGX, name: Regulatory and compliance events }
+
+# Reusable field definitions referenced with `$ref`.
+fieldLibrary:
+  orderId: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' }
+  symbol: { type: string, minLength: 1, maxLength: 20, pattern: '^[A-Z0-9&._-]+$' }
+  exchange: { type: enum, values: [NSE, BSE, MCX, NFO] }
+  quantity: { type: integer, min: 1, max: 100000000 }
+  money: { type: decimal, min: 0, max: 1000000000000 }
+  signedMoney: { type: decimal, min: -1000000000000, max: 1000000000000 }
+  percent: { type: number, min: 0, max: 100 }
+  sipId: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' }
+  fundName: { type: string, minLength: 1, maxLength: 120 }
+  reason: { type: string, minLength: 1, maxLength: 200 }
+  httpsUrl: { type: url, maxLength: 500 }
+
+events:
+  # ---------------------------------------------------------------- TRANSACTION
+  - code: TXNX-001
+    name: Buy Order Executed
+    category: TRANSACTION
+    priority: HIGH
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [push, email, inapp]
+    fallbackChannels: [sms]
+    latencyObjectiveMs: 30000
+    quietHours: DEFER
+    frequencyCapExempt: true
+    idempotencyKeyFields: [orderId]
+    payload:
+      orderId: { $ref: orderId, required: true }
+      symbol: { $ref: symbol, required: true }
+      exchange: { $ref: exchange, required: true }
+      quantity: { $ref: quantity, required: true }
+      price: { $ref: money, required: true }
+      executedAt: { type: datetime, required: true }
+
+  - code: TXNX-002
+    name: Sell Order Executed
+    category: TRANSACTION
+    priority: HIGH
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [push, email, inapp]
+    fallbackChannels: [sms]
+    latencyObjectiveMs: 30000
+    quietHours: DEFER
+    frequencyCapExempt: true
+    idempotencyKeyFields: [orderId]
+    payload:
+      orderId: { $ref: orderId, required: true }
+      symbol: { $ref: symbol, required: true }
+      exchange: { $ref: exchange, required: true }
+      quantity: { $ref: quantity, required: true }
+      price: { $ref: money, required: true }
+      executedAt: { type: datetime, required: true }
+
+  - code: TXNX-003
+    name: Order Rejected
+    category: TRANSACTION
+    priority: HIGH
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [push, sms, inapp]
+    fallbackChannels: [email]
+    latencyObjectiveMs: 30000
+    quietHours: DEFER
+    frequencyCapExempt: true
+    idempotencyKeyFields: [orderId]
+    payload:
+      orderId: { $ref: orderId, required: true }
+      symbol: { $ref: symbol, required: true }
+      exchange: { $ref: exchange, required: true }
+      side: { type: enum, values: [BUY, SELL], required: true }
+      quantity: { $ref: quantity, required: true }
+      reason: { $ref: reason, required: true }
+      rejectedAt: { type: datetime, required: true }
+
+  - code: TXNX-004
+    name: Dividend Credited
+    category: TRANSACTION
+    priority: MEDIUM
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [email, inapp]
+    fallbackChannels: [push]
+    latencyObjectiveMs: 300000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [symbol, recordDate]
+    payload:
+      symbol: { $ref: symbol, required: true }
+      amount: { $ref: money, required: true }
+      perShare: { $ref: money, required: true }
+      recordDate: { type: date, required: true }
+      creditedAt: { type: datetime, required: true }
+      bankAccountLast4: { type: string, pattern: '^[0-9]{4}$', required: false, default: '****' }
+
+  - code: TXNX-005
+    name: Funds Deposited
+    category: TRANSACTION
+    priority: HIGH
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [push, sms, inapp]
+    fallbackChannels: [email]
+    latencyObjectiveMs: 60000
+    quietHours: DEFER
+    frequencyCapExempt: true
+    idempotencyKeyFields: [referenceId]
+    payload:
+      amount: { $ref: money, required: true }
+      mode: { type: enum, values: [UPI, NEFT, RTGS, IMPS, NETBANKING], required: true }
+      referenceId:
+        { type: string, minLength: 4, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', required: true }
+      depositedAt: { type: datetime, required: true }
+      availableBalance: { $ref: money, required: false }
+
+  # ----------------------------------------------------------------------- RISK
+  - code: RISK-001
+    name: Margin Call Warning
+    category: RISK
+    priority: CRITICAL
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [sms, push, email, whatsapp, inapp]
+    defaultChannels: [sms, push, email, inapp]
+    fallbackChannels: [whatsapp]
+    # DEFAULT assumption: margin-related communication is treated as mandatory on
+    # sms + email even if the user disabled those channels. Verify with compliance.
+    mandatoryChannels: [sms, email]
+    latencyObjectiveMs: 10000
+    quietHours: BYPASS
+    frequencyCapExempt: true
+    idempotencyKeyFields: [marginCallId]
+    payload:
+      marginCallId:
+        { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', required: true }
+      marginRequired: { $ref: money, required: true }
+      marginAvailable: { $ref: money, required: true }
+      utilisationPercent: { type: number, min: 0, max: 1000, required: true }
+      deadline: { type: datetime, required: true }
+
+  - code: RISK-002
+    name: Margin Shortfall
+    category: RISK
+    priority: CRITICAL
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [sms, push, email, whatsapp, inapp]
+    defaultChannels: [sms, push, email, inapp]
+    fallbackChannels: [whatsapp]
+    mandatoryChannels: [sms, email]
+    latencyObjectiveMs: 10000
+    quietHours: BYPASS
+    frequencyCapExempt: true
+    idempotencyKeyFields: [shortfallId]
+    payload:
+      shortfallId:
+        { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', required: true }
+      shortfallAmount: { $ref: money, required: true }
+      marginRequired: { $ref: money, required: true }
+      marginAvailable: { $ref: money, required: true }
+      deadline: { type: datetime, required: true }
+
+  - code: RISK-003
+    name: Position Squared Off
+    category: RISK
+    priority: CRITICAL
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [sms, push, email, whatsapp, inapp]
+    defaultChannels: [sms, push, email, inapp]
+    fallbackChannels: [whatsapp]
+    mandatoryChannels: [sms, email]
+    latencyObjectiveMs: 10000
+    quietHours: BYPASS
+    frequencyCapExempt: true
+    idempotencyKeyFields: [orderId]
+    payload:
+      orderId: { $ref: orderId, required: true }
+      symbol: { $ref: symbol, required: true }
+      quantity: { $ref: quantity, required: true }
+      price: { $ref: money, required: true }
+      realisedPnl: { $ref: signedMoney, required: true }
+      reason: { $ref: reason, required: true }
+      squaredOffAt: { type: datetime, required: true }
+
+  - code: RISK-004
+    name: Portfolio Risk Alert
+    category: RISK
+    priority: HIGH
+    regulatoryClass: SERVICE
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [push, inapp]
+    fallbackChannels: [email]
+    latencyObjectiveMs: 60000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [alertId]
+    payload:
+      alertId:
+        { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', required: true }
+      metric: { type: enum, values: [VAR, DRAWDOWN, VOLATILITY, BETA], required: true }
+      value: { type: number, min: -1000, max: 1000, required: true }
+      threshold: { type: number, min: -1000, max: 1000, required: true }
+      portfolioValue: { $ref: money, required: false }
+
+  - code: RISK-005
+    name: Concentration Alert
+    category: RISK
+    priority: MEDIUM
+    regulatoryClass: SERVICE
+    permittedChannels: [push, email, inapp, whatsapp]
+    defaultChannels: [push, inapp]
+    fallbackChannels: [email]
+    latencyObjectiveMs: 300000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [holding, asOf]
+    payload:
+      holding: { type: string, minLength: 1, maxLength: 60, required: true }
+      concentrationPercent: { $ref: percent, required: true }
+      thresholdPercent: { $ref: percent, required: true }
+      asOf: { type: date, required: true }
+
+  # ------------------------------------------------------------------------ SIP
+  - code: SIPX-001
+    name: SIP Due Reminder
+    category: SIP
+    priority: MEDIUM
+    regulatoryClass: SERVICE
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [push, email, inapp]
+    fallbackChannels: [sms]
+    latencyObjectiveMs: 900000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [sipId, dueDate]
+    payload:
+      sipId: { $ref: sipId, required: true }
+      fundName: { $ref: fundName, required: true }
+      amount: { $ref: money, required: true }
+      dueDate: { type: date, required: true }
+
+  - code: SIPX-002
+    name: SIP Executed
+    category: SIP
+    priority: MEDIUM
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [email, inapp]
+    fallbackChannels: [push]
+    latencyObjectiveMs: 300000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [sipId, executedAt]
+    payload:
+      sipId: { $ref: sipId, required: true }
+      fundName: { $ref: fundName, required: true }
+      amount: { $ref: money, required: true }
+      units: { type: decimal, min: 0, max: 1000000000, required: true }
+      nav: { $ref: money, required: true }
+      executedAt: { type: datetime, required: true }
+
+  - code: SIPX-003
+    name: SIP Failed
+    category: SIP
+    priority: HIGH
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [push, email, sms, whatsapp, inapp]
+    defaultChannels: [push, sms, email, inapp]
+    fallbackChannels: [whatsapp]
+    latencyObjectiveMs: 60000
+    quietHours: DEFER
+    frequencyCapExempt: true
+    idempotencyKeyFields: [sipId, failedAt]
+    payload:
+      sipId: { $ref: sipId, required: true }
+      fundName: { $ref: fundName, required: true }
+      amount: { $ref: money, required: true }
+      reason: { $ref: reason, required: true }
+      failedAt: { type: datetime, required: true }
+      nextAttemptDate: { type: date, required: false }
+
+  - code: SIPX-004
+    name: SIP Step-Up Reminder
+    category: SIP
+    priority: LOW
+    # DEFAULT: an upsell nudge, so classified PROMOTIONAL (explicit opt-in + DND apply).
+    regulatoryClass: PROMOTIONAL
+    permittedChannels: [push, email, inapp, whatsapp, sms]
+    defaultChannels: [push, email, inapp]
+    fallbackChannels: []
+    latencyObjectiveMs: 3600000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [sipId, effectiveDate]
+    payload:
+      sipId: { $ref: sipId, required: true }
+      fundName: { $ref: fundName, required: true }
+      currentAmount: { $ref: money, required: true }
+      suggestedAmount: { $ref: money, required: true }
+      effectiveDate: { type: date, required: true }
+
+  - code: SIPX-005
+    name: Goal Milestone Reached
+    category: SIP
+    priority: LOW
+    regulatoryClass: SERVICE
+    permittedChannels: [push, email, inapp, whatsapp]
+    defaultChannels: [push, inapp]
+    fallbackChannels: []
+    latencyObjectiveMs: 3600000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [goalId, milestonePercent]
+    payload:
+      goalId:
+        { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', required: true }
+      goalName: { type: string, minLength: 1, maxLength: 80, required: true }
+      milestonePercent: { type: integer, min: 1, max: 100, required: true }
+      currentValue: { $ref: money, required: true }
+      targetValue: { $ref: money, required: true }
+
+  # --------------------------------------------------------------------- MARKET
+  - code: MKTX-001
+    name: Price Alert Triggered
+    category: MARKET
+    priority: HIGH
+    regulatoryClass: SERVICE
+    permittedChannels: [push, sms, email, whatsapp, inapp]
+    defaultChannels: [push, inapp]
+    fallbackChannels: [sms]
+    latencyObjectiveMs: 15000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    # Cooldown is per (user, event type, symbol) so alerts on different
+    # instruments do not suppress each other.
+    cooldownKeyFields: [symbol]
+    idempotencyKeyFields: [alertId, triggeredAt]
+    payload:
+      alertId:
+        { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', required: true }
+      symbol: { $ref: symbol, required: true }
+      exchange: { $ref: exchange, required: true }
+      direction: { type: enum, values: [ABOVE, BELOW], required: true }
+      triggerPrice: { $ref: money, required: true }
+      currentPrice: { $ref: money, required: true }
+      triggeredAt: { type: datetime, required: true }
+
+  - code: MKTX-002
+    name: Circuit Breaker Hit
+    category: MARKET
+    priority: HIGH
+    regulatoryClass: SERVICE
+    permittedChannels: [push, email, inapp, sms, whatsapp]
+    defaultChannels: [push, inapp]
+    fallbackChannels: []
+    latencyObjectiveMs: 30000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    cooldownKeyFields: [symbol]
+    idempotencyKeyFields: [symbol, circuitType, hitAt]
+    payload:
+      symbol: { $ref: symbol, required: true }
+      exchange: { $ref: exchange, required: true }
+      circuitType: { type: enum, values: [UPPER, LOWER, MARKET_WIDE], required: true }
+      limitPercent: { $ref: percent, required: true }
+      hitAt: { type: datetime, required: true }
+
+  - code: MKTX-003
+    name: Market Open/Close
+    category: MARKET
+    priority: LOW
+    regulatoryClass: SERVICE
+    permittedChannels: [push, inapp, email]
+    defaultChannels: [inapp]
+    fallbackChannels: []
+    latencyObjectiveMs: 300000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [exchange, session, at]
+    payload:
+      exchange: { $ref: exchange, required: true }
+      session: { type: enum, values: [PRE_OPEN, OPEN, CLOSE], required: true }
+      at: { type: datetime, required: true }
+      indexName: { type: string, maxLength: 40, required: false, default: 'NIFTY 50' }
+      changePercent: { type: number, min: -100, max: 100, required: false }
+
+  - code: MKTX-004
+    name: 52-Week High/Low
+    category: MARKET
+    priority: LOW
+    regulatoryClass: PROMOTIONAL
+    permittedChannels: [push, email, inapp, whatsapp]
+    defaultChannels: [push, inapp]
+    fallbackChannels: []
+    latencyObjectiveMs: 900000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    cooldownKeyFields: [symbol]
+    idempotencyKeyFields: [symbol, extreme, tradeDate]
+    payload:
+      symbol: { $ref: symbol, required: true }
+      exchange: { $ref: exchange, required: true }
+      extreme: { type: enum, values: [HIGH, LOW], required: true }
+      price: { $ref: money, required: true }
+      tradeDate: { type: date, required: true }
+
+  - code: MKTX-005
+    name: Earnings Announcement
+    category: MARKET
+    priority: LOW
+    regulatoryClass: PROMOTIONAL
+    permittedChannels: [push, email, inapp, whatsapp]
+    defaultChannels: [email, inapp]
+    fallbackChannels: []
+    latencyObjectiveMs: 3600000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    cooldownKeyFields: [symbol]
+    idempotencyKeyFields: [symbol, quarter]
+    payload:
+      symbol: { $ref: symbol, required: true }
+      companyName: { type: string, minLength: 1, maxLength: 100, required: true }
+      quarter: { type: string, pattern: '^Q[1-4] FY[0-9]{2,4}$', required: true }
+      announcementDate: { type: date, required: true }
+
+  # ----------------------------------------------------------------- REGULATORY
+  - code: REGX-001
+    name: KYC Expiry Warning
+    category: REGULATORY
+    priority: HIGH
+    regulatoryClass: SERVICE
+    permittedChannels: [email, sms, push, whatsapp, inapp]
+    defaultChannels: [email, sms, inapp]
+    fallbackChannels: [push]
+    latencyObjectiveMs: 3600000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [expiryDate, daysRemaining]
+    payload:
+      expiryDate: { type: date, required: true }
+      daysRemaining: { type: integer, min: 0, max: 365, required: true }
+      kycType: { type: enum, values: [CKYC, EKYC, IN_PERSON], required: false, default: CKYC }
+
+  - code: REGX-002
+    name: Nominee Update Reminder
+    category: REGULATORY
+    priority: MEDIUM
+    regulatoryClass: SERVICE
+    permittedChannels: [email, sms, push, whatsapp, inapp]
+    defaultChannels: [email, inapp]
+    fallbackChannels: [push]
+    latencyObjectiveMs: 3600000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [accountType, dueDate]
+    payload:
+      accountType: { type: enum, values: [DEMAT, MUTUAL_FUND, TRADING], required: true }
+      dueDate: { type: date, required: true }
+
+  - code: REGX-003
+    name: Contract Note Generated
+    category: REGULATORY
+    priority: HIGH
+    regulatoryClass: TRANSACTIONAL
+    permittedChannels: [email, inapp, push, whatsapp]
+    defaultChannels: [email, inapp]
+    fallbackChannels: []
+    # DEFAULT assumption: contract notes are treated as mandatory over email.
+    mandatoryChannels: [email]
+    latencyObjectiveMs: 3600000
+    quietHours: DEFER
+    frequencyCapExempt: true
+    idempotencyKeyFields: [contractNoteId]
+    payload:
+      contractNoteId:
+        { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9/_-]+$', required: true }
+      tradeDate: { type: date, required: true }
+      documentUrl: { $ref: httpsUrl, required: true }
+
+  - code: REGX-004
+    name: Tax Statement Available
+    category: REGULATORY
+    priority: MEDIUM
+    regulatoryClass: SERVICE
+    permittedChannels: [email, inapp, push]
+    defaultChannels: [email, inapp]
+    fallbackChannels: []
+    latencyObjectiveMs: 86400000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [financialYear, statementType]
+    payload:
+      financialYear: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$', required: true }
+      statementType: { type: enum, values: [CAPITAL_GAINS, TDS, ANNUAL], required: true }
+      documentUrl: { $ref: httpsUrl, required: true }
+
+  - code: REGX-005
+    name: Regulatory Policy Change
+    category: REGULATORY
+    priority: MEDIUM
+    regulatoryClass: SERVICE
+    permittedChannels: [email, inapp, push]
+    defaultChannels: [email, inapp]
+    fallbackChannels: []
+    latencyObjectiveMs: 86400000
+    quietHours: DEFER
+    frequencyCapExempt: false
+    idempotencyKeyFields: [policyId]
+    payload:
+      policyId:
+        { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', required: true }
+      policyTitle: { type: string, minLength: 1, maxLength: 120, required: true }
+      summary: { type: string, minLength: 1, maxLength: 280, required: true }
+      effectiveDate: { type: date, required: true }
+      referenceUrl: { $ref: httpsUrl, required: false }

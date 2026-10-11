@@ -1,0 +1,211 @@
+# Local/full stack. Requires a populated .env (see .env.example) providing at least:
+#   POSTGRES_PASSWORD, REDIS_PASSWORD, RABBITMQ_PASSWORD, KAFKA_PASSWORD,
+#   JWT_SECRET, DATA_ENCRYPTION_KEY, DATA_HASH_KEY, WEBHOOK_SIGNING_SECRET
+# Start:  docker compose up -d --build      Stop: docker compose down
+# NOTE: authored without Docker available on the authoring machine; see
+# DEPLOYMENT.md "Verification status".
+name: zetheta-notify
+
+x-app-env: &app-env
+  NODE_ENV: ${NODE_ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+  DATABASE_URL: postgres://zetheta:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/zetheta
+  REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+  KAFKA_BROKERS: kafka:9092
+  KAFKA_SASL_MECHANISM: plain
+  KAFKA_SASL_USERNAME: zetheta
+  KAFKA_SASL_PASSWORD: ${KAFKA_PASSWORD:?set KAFKA_PASSWORD}
+  RABBITMQ_URL: amqp://zetheta:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}@rabbitmq:5672/zetheta
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+  DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?set DATA_ENCRYPTION_KEY}
+  DATA_HASH_KEY: ${DATA_HASH_KEY:?set DATA_HASH_KEY}
+  WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?set WEBHOOK_SIGNING_SECRET}
+  PROVIDER_MODE: ${PROVIDER_MODE:-mock}
+  MOCK_RECEIPT_CALLBACK_URL: http://api:3000/api/v1/webhooks/mock
+
+x-app: &app
+  build: .
+  image: zetheta-notification-engine:local
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ['no-new-privileges:true']
+  cap_drop: [ALL]
+  networks: [backend]
+  depends_on:
+    migrate: { condition: service_completed_successfully }
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: zetheta
+      POSTGRES_USER: zetheta
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [backend]
+    ports: ['127.0.0.1:5432:5432']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U zetheta -d zetheta']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy: { resources: { limits: { cpus: '1.0', memory: 1g } } }
+
+  redis:
+    image: redis:7.4.11-alpine
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--requirepass',
+        '${REDIS_PASSWORD:?set REDIS_PASSWORD}',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '256mb',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    volumes: [redisdata:/data]
+    networks: [backend]
+    ports: ['127.0.0.1:6379:6379']
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    deploy: { resources: { limits: { cpus: '0.5', memory: 384m } } }
+
+  kafka:
+    image: apache/kafka:4.3.1
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: SASL_PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: SASL_PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,SASL_PLAINTEXT:SASL_PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: SASL_PLAINTEXT
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      # "__" encodes a literal underscore in apache/kafka env-to-property mapping
+      KAFKA_LISTENER_NAME_SASL__PLAINTEXT_PLAIN_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="zetheta" password="${KAFKA_PASSWORD:?set KAFKA_PASSWORD}"
+        user_zetheta="${KAFKA_PASSWORD:?set KAFKA_PASSWORD}";
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes: [kafkadata:/var/lib/kafka/data]
+    networks: [backend]
+    healthcheck:
+      test: ['CMD-SHELL', "bash -c '</dev/tcp/127.0.0.1/9092' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    deploy: { resources: { limits: { cpus: '1.0', memory: 1g } } }
+
+  rabbitmq:
+    image: rabbitmq:4.3.6-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: zetheta
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: zetheta
+    volumes: [rabbitdata:/var/lib/rabbitmq]
+    networks: [backend]
+    ports: ['127.0.0.1:15672:15672']
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_port_connectivity']
+      interval: 10s
+      timeout: 10s
+      retries: 30
+    deploy: { resources: { limits: { cpus: '0.5', memory: 512m } } }
+
+  migrate:
+    build: .
+    image: zetheta-notification-engine:local
+    # Seeding synthetic data is opt-in (SEED=true) and should never run in production.
+    command:
+      [
+        'sh',
+        '-c',
+        'node dist/src/infrastructure/database/migrate.js latest && if [ "$$SEED" = true ]; then node dist/scripts/seed.js; fi',
+      ]
+    environment:
+      <<: *app-env
+      SEED: ${SEED:-false}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_OPERATOR_PASSWORD: ${SEED_OPERATOR_PASSWORD:-}
+      SEED_SERVICE_SECRET: ${SEED_SERVICE_SECRET:-}
+      SEED_DEMO_USER_PASSWORD: ${SEED_DEMO_USER_PASSWORD:-}
+    networks: [backend]
+    read_only: true
+    tmpfs: [/tmp, /app/.local]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  api:
+    <<: *app
+    environment: *app-env
+    ports: ['127.0.0.1:3000:3000']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      kafka: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3000/health/ready || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    deploy: { resources: { limits: { cpus: '1.0', memory: 512m } } }
+
+  worker-events:
+    <<: *app
+    command:
+      ['node', 'dist/src/workers/main.js', 'outbox-relay,event-consumer,scheduler,dlq-ingest']
+    environment: *app-env
+    depends_on:
+      api: { condition: service_healthy }
+    deploy: { resources: { limits: { cpus: '1.0', memory: 512m } } }
+
+  worker-dispatch:
+    <<: *app
+    command: ['node', 'dist/src/workers/main.js', 'dispatcher,outbox-relay']
+    environment: *app-env
+    depends_on:
+      api: { condition: service_healthy }
+    deploy:
+      replicas: 2
+      resources: { limits: { cpus: '1.0', memory: 512m } }
+
+  worker-analytics:
+    <<: *app
+    command: ['node', 'dist/src/workers/main.js', 'analytics']
+    environment: *app-env
+    depends_on:
+      api: { condition: service_healthy }
+    deploy: { resources: { limits: { cpus: '0.5', memory: 384m } } }
+
+networks:
+  backend: {}
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  kafkadata: {}
+  rabbitdata: {}

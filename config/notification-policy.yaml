@@ -1,0 +1,85 @@
+# =============================================================================
+# Notification policy configuration (version-controlled).
+# Values tagged [ASSIGNMENT] come from the BE-6B brief; [DEFAULT] values are
+# implementation defaults that can be tuned without code changes.
+# =============================================================================
+version: 2
+
+# Retry profiles per priority [ASSIGNMENT]
+# delay = min(baseDelayMs * 2^attempt + jitter(0..jitterMaxMs), maxDelayMs)
+retryProfiles:
+  CRITICAL: { maxRetries: 10, baseDelayMs: 500, maxDelayMs: 60000, jitterMaxMs: 1000 }
+  HIGH: { maxRetries: 5, baseDelayMs: 1000, maxDelayMs: 300000, jitterMaxMs: 1000 }
+  MEDIUM: { maxRetries: 3, baseDelayMs: 5000, maxDelayMs: 1800000, jitterMaxMs: 1000 }
+  LOW: { maxRetries: 2, baseDelayMs: 30000, maxDelayMs: 7200000, jitterMaxMs: 1000 }
+
+# RabbitMQ message priority (x-max-priority = 10) [DEFAULT]
+queuePriority: { CRITICAL: 10, HIGH: 7, MEDIUM: 4, LOW: 1 }
+
+frequencyCaps:
+  # In-app inbox entries are non-intrusive and never capped [DEFAULT]
+  countedChannels: [sms, email, push, whatsapp]
+  global: { limit: 12, windowSeconds: 86400 } # [ASSIGNMENT]
+  channels: # [ASSIGNMENT] (whatsapp: no assignment limit, DEFAULT shown)
+    sms: { limit: 5, windowSeconds: 86400 }
+    push: { limit: 8, windowSeconds: 86400 }
+    email: { limit: 3, windowSeconds: 86400 }
+    whatsapp: { limit: 5, windowSeconds: 86400 }
+  category: { limit: 3, windowSeconds: 3600 } # [ASSIGNMENT]
+  sameEventCooldownSeconds: 900 # [ASSIGNMENT] configurable, 15 min
+  # Exempt events are counted (they consume budget) but are never blocked [DEFAULT]
+  countExemptEvents: true
+  # Weekly digest suggestion: cap hits within 7 days that trigger a suggestion [DEFAULT]
+  digestSuggestion: { capHitThreshold: 5, windowSeconds: 604800 }
+
+quietHours:
+  default: { enabled: true, start: '21:00', end: '08:00' } # [ASSIGNMENT]
+  minimumWindowMinutes: 360 # [ASSIGNMENT] six hours
+  # Only intrusive channels are deferred; email/in-app are silent by nature [DEFAULT]
+  appliesToChannels: [sms, push, whatsapp]
+  # Deferred notifications above this count are folded into one digest [ASSIGNMENT]
+  morningDigestThreshold: 5
+
+defaults:
+  timezone: Asia/Kolkata
+  locale: en
+  channels: { sms: true, email: true, push: true, whatsapp: false, inapp: true }
+  digest: { enabled: false, frequency: DAILY, deliveryTime: '08:00', categories: [MARKET] }
+
+# Segment overrides (layer 2 of the preference hierarchy) [DEFAULT]
+segments:
+  RETAIL: {}
+  HNI:
+    channels: { whatsapp: true }
+  NEW_INVESTOR:
+    categories: { MARKET: { enabled: false } }
+  DORMANT:
+    channels: { sms: false }
+    digest: { enabled: true, frequency: WEEKLY, categories: [MARKET, SIP] }
+
+# Per-message provider cost in micro-INR and daily channel budgets [DEFAULT]
+costs:
+  perMessageMicros: { sms: 180000, whatsapp: 350000, email: 10000, push: 0, inapp: 0 }
+  dailyBudgetMicros: { sms: 50000000000, whatsapp: 20000000000 }
+  # When a channel budget is exhausted, only these priorities may still use it
+  budgetExemptPriorities: [CRITICAL, HIGH]
+
+templates:
+  supportedLocales: [en, hi, mr, ta, te]
+  fallbackLocale: en
+  smsMaxSegments: 4
+
+circuitBreaker:
+  failureThreshold: 5
+  openDurationMs: 30000
+  halfOpenMaxTrials: 1
+
+dnd:
+  # DND registry checks apply to these message classes / channels [DEFAULT].
+  appliesToClasses: [PROMOTIONAL]
+  appliesToChannels: [sms]
+  # Commercial category used when checking partially-blocked DND registrations.
+  # Category naming is an ASSUMPTION — map to the operator's registry codes.
+  promotionalCategory: BANKING_INSURANCE_FINANCIAL
+  # Behaviour when registry data is stale or the lookup fails.
+  onStaleOrUnavailable: { PROMOTIONAL: BLOCK, SERVICE: ALLOW, TRANSACTIONAL: ALLOW }

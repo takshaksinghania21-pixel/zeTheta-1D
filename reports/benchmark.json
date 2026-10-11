@@ -1,0 +1,51 @@
+{
+  "runAt": "2026-10-11T13:55:28.914Z",
+  "environment": {
+    "cpu": "Apple M5",
+    "cores": 10,
+    "memoryGb": 16,
+    "os": "darwin 27.0.0",
+    "node": "v26.8.2",
+    "topology": "single host: API + all workers in ONE Node process (RUN_WORKERS=all), PostgreSQL 16, Redis 8, Kafka 4.3 (1 broker), RabbitMQ 4.3, mock providers"
+  },
+  "parameters": {
+    "events": 10000,
+    "vus": 50,
+    "users": 200,
+    "eventType": "TXNX-001 (push+email+inapp → 3 notifications/event)"
+  },
+  "ingestion": {
+    "wallSeconds": 2.983,
+    "httpRequests": 5051,
+    "httpRequestsPerSecond": 1996.071087161244,
+    "httpFailedRate": 0,
+    "httpDurationMs": {
+      "p50": 14.564,
+      "p95": 22.40649999999999,
+      "p99": 75.65049999999991,
+      "max": 1426.219
+    },
+    "eventsAccepted": 10000,
+    "eventsRejected": 0
+  },
+  "processing": {
+    "eventsProcessed": 10000,
+    "notificationsStillPending": 0,
+    "totalSecondsUntilDrained": 94.601,
+    "endToEndEventsPerSecond": 105.70712783162969,
+    "eventProcessingLatencyMs": {
+      "p50": 25770.184,
+      "p95": 48949.93379999999,
+      "p99": 51152.10366
+    },
+    "notifications": {
+      "notifications": 30000,
+      "sent": 30000,
+      "p50": 17,
+      "p95": 50810.149999999994,
+      "p99": 55700.02,
+      "first_created": "2026-10-11T13:55:29.221Z",
+      "last_sent": "2026-10-11T13:57:02.800Z"
+    }
+  }
+}

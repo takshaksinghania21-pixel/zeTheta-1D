@@ -1,0 +1,108 @@
+# Telugu templates. Machine-assisted translation — must be reviewed by a native
+# speaker / compliance before production use. Falls back to English per event.
+locale: te
+templates:
+  TXNX-001:
+    title: 'కొనుగోలు ఆర్డర్ అమలైంది: {{symbol}}'
+    short: '{{exchange}}లో {{symbol}} {{quantity}} షేర్లు {{currency price}} ధరకు కొనుగోలు చేయబడ్డాయి. ఆర్డర్ {{orderId}}. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\nమీ కొనుగోలు ఆర్డర్ {{orderId}} ({{symbol}} {{quantity}} షేర్లు) {{date executedAt format='datetime'}}న {{exchange}}లో ఒక్కో షేరుకు {{currency price}} ధరకు అమలైంది.\n\nఈ ఆర్డర్ మీరు చేయకపోతే, వెంటనే సహాయ కేంద్రాన్ని సంప్రదించండి."
+  TXNX-002:
+    title: 'అమ్మకం ఆర్డర్ అమలైంది: {{symbol}}'
+    short: '{{exchange}}లో {{symbol}} {{quantity}} షేర్లు {{currency price}} ధరకు అమ్మబడ్డాయి. ఆర్డర్ {{orderId}}. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\nమీ అమ్మకం ఆర్డర్ {{orderId}} ({{symbol}} {{quantity}} షేర్లు) {{date executedAt format='datetime'}}న {{exchange}}లో ఒక్కో షేరుకు {{currency price}} ధరకు అమలైంది.\n\nఈ ఆర్డర్ మీరు చేయకపోతే, వెంటనే సహాయ కేంద్రాన్ని సంప్రదించండి."
+  TXNX-003:
+    title: 'ఆర్డర్ తిరస్కరించబడింది: {{symbol}}'
+    short: "మీ {{#if (eq side 'BUY')}}కొనుగోలు{{else}}అమ్మకం{{/if}} ఆర్డర్ {{orderId}} ({{quantity}} {{symbol}}) తిరస్కరించబడింది: {{reason}}. -Zetheta"
+    long: "నమస్తే {{user.name}},\n\nమీ {{#if (eq side 'BUY')}}కొనుగోలు{{else}}అమ్మకం{{/if}} ఆర్డర్ {{orderId}} ({{exchange}}లో {{symbol}} {{quantity}} షేర్లు) {{date rejectedAt format='datetime'}}న తిరస్కరించబడింది.\n\nకారణం: {{reason}}\n\nమీ నిధులు లేదా హోల్డింగ్‌లపై ఎలాంటి ప్రభావం లేదు."
+  TXNX-004:
+    title: 'డివిడెండ్ జమ: {{symbol}}'
+    short: '{{symbol}} నుండి {{currency amount}} డివిడెండ్ మీ బ్యాంక్ ఖాతాలో (చివరి అంకెలు {{bankAccountLast4}}) జమ అయింది. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\nరికార్డ్ తేదీ {{date recordDate}}కి {{symbol}} నుండి {{currency amount}} (ఒక్కో షేరుకు {{currency perShare}}) డివిడెండ్ {{date creditedAt format='datetime'}}న మీ బ్యాంక్ ఖాతాలో (చివరి అంకెలు {{bankAccountLast4}}) జమ అయింది."
+  TXNX-005:
+    title: 'నిధులు జమ: {{currency amount}}'
+    short: '{{mode}} ద్వారా {{currency amount}} అందింది (రిఫరెన్స్ {{referenceId}}).{{#if availableBalance}} అందుబాటులో ఉన్న బ్యాలెన్స్: {{currency availableBalance}}.{{/if}} -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{date depositedAt format='datetime'}}న {{mode}} ద్వారా {{currency amount}} అందింది. రిఫరెన్స్: {{referenceId}}.{{#if availableBalance}}\n\nమీ అందుబాటులో ఉన్న బ్యాలెన్స్ ఇప్పుడు {{currency availableBalance}}.{{/if}}"
+  RISK-001:
+    title: 'అత్యవసరం: మార్జిన్ కాల్'
+    short: "అత్యవసర మార్జిన్ కాల్: అవసరం {{currency marginRequired}}, అందుబాటులో {{currency marginAvailable}}. {{date deadline format='datetime'}} లోగా నిధులు జోడించండి. -Zetheta"
+    long: "నమస్తే {{user.name}},\n\nమీ ఖాతాకు మార్జిన్ కాల్ వచ్చింది.\n\nఅవసరమైన మార్జిన్: {{currency marginRequired}}\nఅందుబాటులో ఉన్న మార్జిన్: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% వినియోగం)\n\n{{date deadline format='datetime'}} లోపు నిధులు జోడించండి లేదా పొజిషన్లను తగ్గించండి; లేకపోతే ముందస్తు సమాచారం లేకుండా పొజిషన్లు స్క్వేర్-ఆఫ్ చేయబడవచ్చు."
+  RISK-002:
+    title: 'అత్యవసరం: మార్జిన్ కొరత {{currency shortfallAmount}}'
+    short: "అత్యవసరం: {{currency shortfallAmount}} మార్జిన్ కొరత. {{date deadline format='datetime'}} లోగా నిధులు జోడించండి. -Zetheta"
+    long: "నమస్తే {{user.name}},\n\nమీ ఖాతాలో {{currency shortfallAmount}} మార్జిన్ కొరత ఉంది.\n\nఅవసరమైన మార్జిన్: {{currency marginRequired}}\nఅందుబాటులో ఉన్న మార్జిన్: {{currency marginAvailable}}\n\nస్క్వేర్-ఆఫ్ నివారించడానికి {{date deadline format='datetime'}} లోపు కొరతను పూరించండి."
+  RISK-003:
+    title: 'పొజిషన్ స్క్వేర్-ఆఫ్: {{symbol}}'
+    short: '{{symbol}} {{quantity}} షేర్లు {{currency price}} వద్ద స్క్వేర్-ఆఫ్ ({{reason}}). లాభం/నష్టం: {{currency realisedPnl}}. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{symbol}}లో మీ {{quantity}} షేర్ల పొజిషన్ {{date squaredOffAt format='datetime'}}న {{currency price}} వద్ద స్క్వేర్-ఆఫ్ చేయబడింది.\n\nకారణం: {{reason}}\nవాస్తవిక లాభం/నష్టం: {{currency realisedPnl}}\n\nఆర్డర్ రిఫరెన్స్: {{orderId}}."
+  RISK-004:
+    title: 'పోర్ట్‌ఫోలియో రిస్క్ హెచ్చరిక: {{metric}}'
+    short: 'మీ పోర్ట్‌ఫోలియో {{metric}} {{number value decimals=2}}, మీ పరిమితి {{number threshold decimals=2}} దాటింది. దయచేసి సమీక్షించండి. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\nమీ పోర్ట్‌ఫోలియో {{metric}} {{number value decimals=2}}కి చేరింది, ఇది మీ హెచ్చరిక పరిమితి {{number threshold decimals=2}}ని దాటింది.{{#if portfolioValue}}\n\nప్రస్తుత పోర్ట్‌ఫోలియో విలువ: {{currency portfolioValue}}.{{/if}}\n\nమీ పొజిషన్లను సమీక్షించండి."
+  RISK-005:
+    title: 'కేంద్రీకరణ హెచ్చరిక: {{holding}}'
+    short: '{{holding}} మీ పోర్ట్‌ఫోలియోలో {{percent concentrationPercent}} (పరిమితి {{percent thresholdPercent}}). వైవిధ్యీకరణను పరిగణించండి. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{date asOf}} నాటికి {{holding}} మీ పోర్ట్‌ఫోలియోలో {{percent concentrationPercent}}, ఇది మీ పరిమితి {{percent thresholdPercent}} కంటే ఎక్కువ.\n\nవైవిధ్యమైన పోర్ట్‌ఫోలియో రిస్క్‌ను తగ్గించగలదు."
+  SIPX-001:
+    title: 'SIP గడువు తేదీ {{date dueDate}}'
+    short: '{{fundName}}లో మీ {{currency amount}} SIP {{date dueDate}}న చెల్లించాలి. తగినంత బ్యాలెన్స్ ఉంచండి. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{fundName}}లో మీ {{currency amount}} SIP {{date dueDate}}న చెల్లించాలి.\n\nవాయిదా విఫలం కాకుండా ఉండేందుకు లింక్ చేసిన బ్యాంక్ ఖాతాలో తగినంత బ్యాలెన్స్ ఉంచండి."
+  SIPX-002:
+    title: 'SIP అమలైంది: {{fundName}}'
+    short: '{{fundName}}లో {{currency amount}} SIP అమలైంది: {{number units}} యూనిట్లు, NAV {{currency nav}}. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{fundName}}లో మీ {{currency amount}} SIP వాయిదా {{date executedAt format='datetime'}}న అమలైంది.\n\nకేటాయించిన యూనిట్లు: {{number units}}\nNAV: {{currency nav}}"
+  SIPX-003:
+    title: 'SIP విఫలమైంది: {{fundName}}'
+    short: '{{fundName}}లో మీ {{currency amount}} SIP విఫలమైంది: {{reason}}.{{#if nextAttemptDate}} తదుపరి ప్రయత్నం {{date nextAttemptDate}}.{{/if}} -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{fundName}}లో మీ {{currency amount}} SIP వాయిదా {{date failedAt format='datetime'}}న ప్రాసెస్ కాలేదు.\n\nకారణం: {{reason}}{{#if nextAttemptDate}}\n\n{{date nextAttemptDate}}న మళ్లీ ప్రయత్నిస్తాము.{{/if}}\n\nమీ బ్యాంక్ బ్యాలెన్స్ మరియు మాండేట్ స్థితిని తనిఖీ చేయండి."
+  SIPX-004:
+    title: '{{fundName}}లో మీ SIP పెంచండి'
+    short: '{{date effectiveDate}} నుండి మీ {{fundName}} SIPని {{currency currentAmount}} నుండి {{currency suggestedAmount}}కి పెంచండి. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{date effectiveDate}} నుండి {{fundName}}లో మీ SIPని {{currency currentAmount}} నుండి {{currency suggestedAmount}}కి పెంచుకోవచ్చు.\n\nమ్యూచువల్ ఫండ్ పెట్టుబడులు మార్కెట్ రిస్క్‌లకు లోబడి ఉంటాయి. పథకానికి సంబంధించిన అన్ని పత్రాలను జాగ్రత్తగా చదవండి."
+  SIPX-005:
+    title: 'లక్ష్య మైలురాయి: {{goalName}} {{milestonePercent}}%'
+    short: 'మీ లక్ష్యం {{goalName}}లో {{milestonePercent}}% చేరుకున్నారు: {{currency targetValue}}లో {{currency currentValue}}. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\nఅభినందనలు! మీ లక్ష్యం {{goalName}} {{milestonePercent}}% పూర్తయింది.\n\nప్రస్తుత విలువ: {{currency currentValue}}\nలక్ష్యం: {{currency targetValue}}"
+  MKTX-001:
+    title: "ధర హెచ్చరిక: {{symbol}} {{currency triggerPrice}} {{#if (eq direction 'ABOVE')}}పైన{{else}}కింద{{/if}}"
+    short: "ధర హెచ్చరిక: {{symbol}} ({{exchange}}) {{currency currentPrice}} వద్ద ఉంది, మీ ట్రిగ్గర్ {{currency triggerPrice}} {{#if (eq direction 'ABOVE')}}పైన{{else}}కింద{{/if}}. -Zetheta"
+    long: "నమస్తే {{user.name}},\n\nమీ ధర హెచ్చరిక {{alertId}} {{date triggeredAt format='datetime'}}న ట్రిగ్గర్ అయింది.\n\n{{symbol}} ({{exchange}}) {{currency currentPrice}} వద్ద ట్రేడ్ అవుతోంది, ఇది మీ ట్రిగ్గర్ ధర {{currency triggerPrice}} {{#if (eq direction 'ABOVE')}}పైన{{else}}కింద{{/if}} ఉంది."
+  MKTX-002:
+    title: 'సర్క్యూట్ తాకింది: {{symbol}}'
+    short: "{{exchange}}లో {{symbol}} {{#if (eq circuitType 'UPPER')}}అప్పర్{{else if (eq circuitType 'LOWER')}}లోయర్{{else}}మార్కెట్-వైడ్{{/if}} సర్క్యూట్ ({{percent limitPercent}}) తాకింది. -Zetheta"
+    long: "నమస్తే {{user.name}},\n\n{{date hitAt format='datetime'}}న {{exchange}}లో {{symbol}} {{percent limitPercent}} {{#if (eq circuitType 'UPPER')}}అప్పర్{{else if (eq circuitType 'LOWER')}}లోయర్{{else}}మార్కెట్-వైడ్{{/if}} సర్క్యూట్ పరిమితిని తాకింది.\n\nసర్క్యూట్ సడలించే వరకు ట్రేడింగ్ పరిమితం కావచ్చు."
+  MKTX-003:
+    title: "{{exchange}} {{#if (eq session 'OPEN')}}మార్కెట్ ప్రారంభం{{else if (eq session 'CLOSE')}}మార్కెట్ ముగింపు{{else}}ప్రీ-ఓపెన్ సెషన్{{/if}}"
+    short: "{{exchange}} {{#if (eq session 'OPEN')}}మార్కెట్ ప్రారంభమైంది{{else if (eq session 'CLOSE')}}మార్కెట్ ముగిసింది{{else}}ప్రీ-ఓపెన్ ప్రారంభమైంది{{/if}}: {{date at format='time'}}.{{#if changePercent}} {{indexName}}: {{percent changePercent}}.{{/if}} -Zetheta"
+    long: "నమస్తే {{user.name}},\n\n{{date at}}న {{date at format='time'}}కి {{exchange}} {{#if (eq session 'OPEN')}}మార్కెట్ ప్రారంభమైంది{{else if (eq session 'CLOSE')}}మార్కెట్ ముగిసింది{{else}}ప్రీ-ఓపెన్ సెషన్ ప్రారంభమైంది{{/if}}.{{#if changePercent}}\n\n{{indexName}} మార్పు: {{percent changePercent}}.{{/if}}"
+  MKTX-004:
+    title: "{{symbol}} 52 వారాల {{#if (eq extreme 'HIGH')}}గరిష్ఠం{{else}}కనిష్ఠం{{/if}}"
+    short: "{{exchange}}లో {{symbol}} {{currency price}} వద్ద 52 వారాల {{#if (eq extreme 'HIGH')}}గరిష్ఠాన్ని{{else}}కనిష్ఠాన్ని{{/if}} తాకింది. -Zetheta"
+    long: "నమస్తే {{user.name}},\n\n{{date tradeDate}}న {{exchange}}లో {{symbol}} {{currency price}} వద్ద 52 వారాల {{#if (eq extreme 'HIGH')}}గరిష్ఠాన్ని{{else}}కనిష్ఠాన్ని{{/if}} తాకింది.\n\nసెక్యూరిటీలలో పెట్టుబడులు మార్కెట్ రిస్క్‌లకు లోబడి ఉంటాయి."
+  MKTX-005:
+    title: 'ఫలితాలు: {{companyName}} {{quarter}}'
+    short: '{{companyName}} ({{symbol}}) {{quarter}} ఫలితాలను {{date announcementDate}}న ప్రకటిస్తుంది. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{companyName}} ({{symbol}}) తన {{quarter}} ఫలితాలను {{date announcementDate}}న ప్రకటిస్తుంది.\n\nసెక్యూరిటీలలో పెట్టుబడులు మార్కెట్ రిస్క్‌లకు లోబడి ఉంటాయి."
+  REGX-001:
+    title: 'KYC {{daysRemaining}} రోజుల్లో గడువు ముగుస్తుంది'
+    short: 'మీ KYC {{date expiryDate}}న గడువు ముగుస్తుంది ({{daysRemaining}} రోజులు). ఖాతా పరిమితులు నివారించడానికి నవీకరించండి. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\nమీ {{kycType}} KYC {{date expiryDate}}న గడువు ముగుస్తుంది ({{daysRemaining}} రోజులు మిగిలి ఉన్నాయి).\n\nఖాతా పరిమితులను నివారించడానికి దయచేసి మీ KYCని నవీకరించండి."
+  REGX-002:
+    title: 'మీ నామినీ వివరాలను నవీకరించండి'
+    short: 'దయచేసి {{date dueDate}} లోపు మీ {{accountType}} ఖాతా కోసం నామినీ వివరాలను జోడించండి లేదా నిర్ధారించండి. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\nదయచేసి {{date dueDate}} లోపు మీ {{accountType}} ఖాతా కోసం నామినీ వివరాలను జోడించండి లేదా నిర్ధారించండి.\n\nయాప్ ప్రొఫైల్ విభాగం నుండి దీన్ని నవీకరించవచ్చు."
+  REGX-003:
+    title: 'కాంట్రాక్ట్ నోట్ {{contractNoteId}}'
+    short: '{{date tradeDate}} ట్రేడ్‌ల కాంట్రాక్ట్ నోట్ {{contractNoteId}} అందుబాటులో ఉంది. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{date tradeDate}}న మీ ట్రేడ్‌ల కోసం కాంట్రాక్ట్ నోట్ {{contractNoteId}} రూపొందించబడింది.\n\nడౌన్‌లోడ్: {{documentUrl}}"
+  REGX-004:
+    title: 'ఆర్థిక సంవత్సరం {{financialYear}} పన్ను స్టేట్‌మెంట్'
+    short: 'ఆర్థిక సంవత్సరం {{financialYear}}కి మీ {{statementType}} స్టేట్‌మెంట్ అందుబాటులో ఉంది. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\nఆర్థిక సంవత్సరం {{financialYear}}కి మీ {{statementType}} స్టేట్‌మెంట్ సిద్ధంగా ఉంది.\n\nడౌన్‌లోడ్: {{documentUrl}}"
+  REGX-005:
+    title: 'విధాన నవీకరణ: {{policyTitle}}'
+    short: '{{date effectiveDate}} నుండి అమలయ్యే విధాన నవీకరణ: {{policyTitle}}. -Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{policyTitle}} ({{date effectiveDate}} నుండి అమలు)\n\n{{summary}}{{#if referenceUrl}}\n\nవివరాలు: {{referenceUrl}}{{/if}}"
+  SYS-DIGEST:
+    title: 'మీకు {{count}} అప్‌డేట్‌లు'
+    short: 'మీకు {{count}} అప్‌డేట్‌లు: {{#each items}}{{title}}; {{/each}}-Zetheta'
+    long: "నమస్తే {{user.name}},\n\n{{count}} అప్‌డేట్‌ల సారాంశం:\n\n{{#each items}}- {{title}}\n{{/each}}\nవివరాల కోసం యాప్‌ను తెరవండి."

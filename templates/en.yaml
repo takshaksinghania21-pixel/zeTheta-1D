@@ -1,0 +1,111 @@
+# English templates (fallback locale). Channel mapping:
+#   sms -> short | push -> title + short | inapp -> title + short
+#   whatsapp -> long | email -> subject = title, body = long (HTML via layout)
+# Variables: payload fields of the event, user.name. Helpers: currency, number,
+# percent, date (format='date'|'datetime'|'time'), default, eq, gt, humanize.
+locale: en
+templates:
+  TXNX-001:
+    title: 'Buy order executed: {{symbol}}'
+    short: 'Bought {{quantity}} {{symbol}} @ {{currency price}} on {{exchange}}. Order {{orderId}}. -Zetheta'
+    long: "Hi {{user.name}},\n\nYour buy order {{orderId}} for {{quantity}} shares of {{symbol}} was executed on {{exchange}} at {{currency price}} per share on {{date executedAt format='datetime'}}.\n\nIf you did not place this order, contact support immediately."
+  TXNX-002:
+    title: 'Sell order executed: {{symbol}}'
+    short: 'Sold {{quantity}} {{symbol}} @ {{currency price}} on {{exchange}}. Order {{orderId}}. -Zetheta'
+    long: "Hi {{user.name}},\n\nYour sell order {{orderId}} for {{quantity}} shares of {{symbol}} was executed on {{exchange}} at {{currency price}} per share on {{date executedAt format='datetime'}}.\n\nIf you did not place this order, contact support immediately."
+  TXNX-003:
+    title: 'Order rejected: {{symbol}}'
+    short: "Your {{#if (eq side 'BUY')}}buy{{else}}sell{{/if}} order {{orderId}} for {{quantity}} {{symbol}} was rejected: {{reason}}. -Zetheta"
+    long: "Hi {{user.name}},\n\nYour {{#if (eq side 'BUY')}}buy{{else}}sell{{/if}} order {{orderId}} for {{quantity}} shares of {{symbol}} on {{exchange}} was rejected on {{date rejectedAt format='datetime'}}.\n\nReason: {{reason}}\n\nNo funds or holdings were affected."
+  TXNX-004:
+    title: 'Dividend credited: {{symbol}}'
+    short: 'Dividend of {{currency amount}} from {{symbol}} credited to bank a/c ending {{bankAccountLast4}}. -Zetheta'
+    long: "Hi {{user.name}},\n\nA dividend of {{currency amount}} ({{currency perShare}} per share) from {{symbol}} for record date {{date recordDate}} was credited on {{date creditedAt format='datetime'}} to your bank account ending {{bankAccountLast4}}."
+  TXNX-005:
+    title: 'Funds added: {{currency amount}}'
+    short: '{{currency amount}} received via {{mode}} (ref {{referenceId}}).{{#if availableBalance}} Available balance: {{currency availableBalance}}.{{/if}} -Zetheta'
+    long: "Hi {{user.name}},\n\nWe received {{currency amount}} via {{mode}} on {{date depositedAt format='datetime'}}. Reference: {{referenceId}}.{{#if availableBalance}}\n\nYour available balance is now {{currency availableBalance}}.{{/if}}"
+  RISK-001:
+    title: 'URGENT: Margin call'
+    short: "URGENT margin call: required {{currency marginRequired}}, available {{currency marginAvailable}}. Add funds by {{date deadline format='datetime'}} to avoid square-off. -Zetheta"
+    long: "Hi {{user.name}},\n\nYour account has received a margin call.\n\nMargin required: {{currency marginRequired}}\nMargin available: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% utilised)\n\nPlease add funds or reduce positions before {{date deadline format='datetime'}}. Otherwise open positions may be squared off without further notice."
+  RISK-002:
+    title: 'URGENT: Margin shortfall {{currency shortfallAmount}}'
+    short: "URGENT: margin shortfall of {{currency shortfallAmount}}. Add funds by {{date deadline format='datetime'}} or positions may be squared off. -Zetheta"
+    long: "Hi {{user.name}},\n\nYour account has a margin shortfall of {{currency shortfallAmount}}.\n\nMargin required: {{currency marginRequired}}\nMargin available: {{currency marginAvailable}}\n\nPlease clear the shortfall before {{date deadline format='datetime'}} to avoid square-off of your positions."
+  RISK-003:
+    title: 'Position squared off: {{symbol}}'
+    short: '{{quantity}} {{symbol}} squared off @ {{currency price}} ({{reason}}). Realised P&L: {{currency realisedPnl}}. -Zetheta'
+    long: "Hi {{user.name}},\n\nYour position of {{quantity}} {{symbol}} was squared off at {{currency price}} on {{date squaredOffAt format='datetime'}}.\n\nReason: {{reason}}\nRealised P&L: {{currency realisedPnl}}\n\nOrder reference: {{orderId}}."
+  RISK-004:
+    title: 'Portfolio risk alert: {{humanize metric}}'
+    short: 'Your portfolio {{humanize metric}} is {{number value decimals=2}}, beyond your threshold of {{number threshold decimals=2}}. Please review. -Zetheta'
+    long: "Hi {{user.name}},\n\nYour portfolio {{humanize metric}} has reached {{number value decimals=2}}, beyond your alert threshold of {{number threshold decimals=2}}.{{#if portfolioValue}}\n\nCurrent portfolio value: {{currency portfolioValue}}.{{/if}}\n\nConsider reviewing your positions."
+  RISK-005:
+    title: 'Concentration alert: {{holding}}'
+    short: '{{holding}} is {{percent concentrationPercent}} of your portfolio (limit {{percent thresholdPercent}}). Consider diversifying. -Zetheta'
+    long: "Hi {{user.name}},\n\nAs of {{date asOf}}, {{holding}} makes up {{percent concentrationPercent}} of your portfolio, above your concentration limit of {{percent thresholdPercent}}.\n\nA diversified portfolio can reduce risk."
+  SIPX-001:
+    title: 'SIP due on {{date dueDate}}'
+    short: 'Your SIP of {{currency amount}} in {{fundName}} is due on {{date dueDate}}. Please keep sufficient balance. -Zetheta'
+    long: "Hi {{user.name}},\n\nYour SIP of {{currency amount}} in {{fundName}} is due on {{date dueDate}}.\n\nPlease keep sufficient balance in your linked bank account to avoid a failed instalment."
+  SIPX-002:
+    title: 'SIP executed: {{fundName}}'
+    short: 'SIP of {{currency amount}} in {{fundName}} executed: {{number units}} units @ NAV {{currency nav}}. -Zetheta'
+    long: "Hi {{user.name}},\n\nYour SIP instalment of {{currency amount}} in {{fundName}} was executed on {{date executedAt format='datetime'}}.\n\nUnits allotted: {{number units}}\nNAV: {{currency nav}}"
+  SIPX-003:
+    title: 'SIP failed: {{fundName}}'
+    short: 'Your SIP of {{currency amount}} in {{fundName}} failed: {{reason}}.{{#if nextAttemptDate}} Next attempt on {{date nextAttemptDate}}.{{/if}} -Zetheta'
+    long: "Hi {{user.name}},\n\nYour SIP instalment of {{currency amount}} in {{fundName}} could not be processed on {{date failedAt format='datetime'}}.\n\nReason: {{reason}}{{#if nextAttemptDate}}\n\nWe will try again on {{date nextAttemptDate}}.{{/if}}\n\nPlease check your bank balance and mandate status."
+  SIPX-004:
+    title: 'Step up your SIP in {{fundName}}'
+    short: 'Grow faster: step up your {{fundName}} SIP from {{currency currentAmount}} to {{currency suggestedAmount}} from {{date effectiveDate}}. -Zetheta'
+    long: "Hi {{user.name}},\n\nYou can step up your SIP in {{fundName}} from {{currency currentAmount}} to {{currency suggestedAmount}} starting {{date effectiveDate}}.\n\nMutual fund investments are subject to market risks. Read all scheme-related documents carefully."
+  SIPX-005:
+    title: 'Goal milestone: {{milestonePercent}}% of {{goalName}}'
+    short: 'You have reached {{milestonePercent}}% of your goal {{goalName}}: {{currency currentValue}} of {{currency targetValue}}. -Zetheta'
+    long: "Hi {{user.name}},\n\nCongratulations! Your goal {{goalName}} is {{milestonePercent}}% complete.\n\nCurrent value: {{currency currentValue}}\nTarget: {{currency targetValue}}"
+  MKTX-001:
+    title: "Price alert: {{symbol}} {{#if (eq direction 'ABOVE')}}above{{else}}below{{/if}} {{currency triggerPrice}}"
+    short: "Price alert: {{symbol}} ({{exchange}}) is at {{currency currentPrice}}, {{#if (eq direction 'ABOVE')}}above{{else}}below{{/if}} your trigger of {{currency triggerPrice}}. -Zetheta"
+    long: "Hi {{user.name}},\n\nYour price alert {{alertId}} was triggered on {{date triggeredAt format='datetime'}}.\n\n{{symbol}} ({{exchange}}) is trading at {{currency currentPrice}}, {{#if (eq direction 'ABOVE')}}above{{else}}below{{/if}} your trigger price of {{currency triggerPrice}}."
+  MKTX-002:
+    title: 'Circuit hit: {{symbol}}'
+    short: "{{symbol}} hit the {{#if (eq circuitType 'UPPER')}}upper{{else if (eq circuitType 'LOWER')}}lower{{else}}market-wide{{/if}} circuit ({{percent limitPercent}}) on {{exchange}}. -Zetheta"
+    long: "Hi {{user.name}},\n\n{{symbol}} hit the {{#if (eq circuitType 'UPPER')}}upper{{else if (eq circuitType 'LOWER')}}lower{{else}}market-wide{{/if}} circuit limit of {{percent limitPercent}} on {{exchange}} at {{date hitAt format='datetime'}}.\n\nTrading may be restricted until the circuit is relaxed."
+  MKTX-003:
+    title: "{{exchange}} {{#if (eq session 'OPEN')}}market open{{else if (eq session 'CLOSE')}}market close{{else}}pre-open session{{/if}}"
+    short: "{{exchange}} {{#if (eq session 'OPEN')}}market opened{{else if (eq session 'CLOSE')}}market closed{{else}}pre-open started{{/if}} at {{date at format='time'}}.{{#if changePercent}} {{indexName}}: {{percent changePercent}}.{{/if}} -Zetheta"
+    long: "Hi {{user.name}},\n\nThe {{exchange}} {{#if (eq session 'OPEN')}}market opened{{else if (eq session 'CLOSE')}}market closed{{else}}pre-open session started{{/if}} at {{date at format='time'}} on {{date at}}.{{#if changePercent}}\n\n{{indexName}} change: {{percent changePercent}}.{{/if}}"
+  MKTX-004:
+    title: "{{symbol}} at 52-week {{#if (eq extreme 'HIGH')}}high{{else}}low{{/if}}"
+    short: "{{symbol}} touched a 52-week {{#if (eq extreme 'HIGH')}}high{{else}}low{{/if}} of {{currency price}} on {{exchange}}. -Zetheta"
+    long: "Hi {{user.name}},\n\n{{symbol}} touched a 52-week {{#if (eq extreme 'HIGH')}}high{{else}}low{{/if}} of {{currency price}} on {{exchange}} on {{date tradeDate}}.\n\nInvestments in securities are subject to market risks."
+  MKTX-005:
+    title: 'Earnings: {{companyName}} {{quarter}}'
+    short: '{{companyName}} ({{symbol}}) will announce {{quarter}} results on {{date announcementDate}}. -Zetheta'
+    long: "Hi {{user.name}},\n\n{{companyName}} ({{symbol}}) will announce its {{quarter}} results on {{date announcementDate}}.\n\nInvestments in securities are subject to market risks."
+  REGX-001:
+    title: 'KYC expires in {{daysRemaining}} days'
+    short: 'Your KYC expires on {{date expiryDate}} ({{daysRemaining}} days). Please update it to avoid account restrictions. -Zetheta'
+    long: "Hi {{user.name}},\n\nYour {{kycType}} KYC expires on {{date expiryDate}} ({{daysRemaining}} days remaining).\n\nPlease update your KYC to avoid restrictions on your account."
+  REGX-002:
+    title: 'Update your nominee details'
+    short: 'Please add or confirm nominee details for your {{humanize accountType}} account by {{date dueDate}}. -Zetheta'
+    long: "Hi {{user.name}},\n\nPlease add or confirm the nominee details for your {{humanize accountType}} account by {{date dueDate}}.\n\nYou can update nominees from the profile section of the app."
+  REGX-003:
+    title: 'Contract note {{contractNoteId}}'
+    short: 'Contract note {{contractNoteId}} for trades on {{date tradeDate}} is now available. -Zetheta'
+    long: "Hi {{user.name}},\n\nThe contract note {{contractNoteId}} for your trades on {{date tradeDate}} has been generated.\n\nDownload: {{documentUrl}}"
+  REGX-004:
+    title: 'Tax statement for FY {{financialYear}}'
+    short: 'Your {{humanize statementType}} statement for FY {{financialYear}} is available. -Zetheta'
+    long: "Hi {{user.name}},\n\nYour {{humanize statementType}} statement for FY {{financialYear}} is ready.\n\nDownload: {{documentUrl}}"
+  REGX-005:
+    title: 'Policy update: {{policyTitle}}'
+    short: 'Policy update effective {{date effectiveDate}}: {{policyTitle}}. -Zetheta'
+    long: "Hi {{user.name}},\n\n{{policyTitle}} (effective {{date effectiveDate}})\n\n{{summary}}{{#if referenceUrl}}\n\nDetails: {{referenceUrl}}{{/if}}"
+  SYS-DIGEST:
+    title: 'You have {{count}} updates'
+    short: 'You have {{count}} updates: {{#each items}}{{title}}; {{/each}}-Zetheta'
+    long: "Hi {{user.name}},\n\nHere is a summary of {{count}} updates:\n\n{{#each items}}- {{title}}\n{{/each}}\nOpen the app for details."

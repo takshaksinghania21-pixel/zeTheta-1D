@@ -1,0 +1,108 @@
+# Marathi templates. Machine-assisted translation — must be reviewed by a native
+# speaker / compliance before production use. Falls back to English per event.
+locale: mr
+templates:
+  TXNX-001:
+    title: 'खरेदी ऑर्डर पूर्ण: {{symbol}}'
+    short: '{{exchange}} वर {{symbol}} चे {{quantity}} शेअर्स {{currency price}} दराने खरेदी केले. ऑर्डर {{orderId}}. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\nतुमची खरेदी ऑर्डर {{orderId}} ({{symbol}} चे {{quantity}} शेअर्स) {{date executedAt format='datetime'}} रोजी {{exchange}} वर प्रति शेअर {{currency price}} दराने पूर्ण झाली.\n\nही ऑर्डर तुम्ही दिली नसल्यास, त्वरित सहाय्याशी संपर्क साधा."
+  TXNX-002:
+    title: 'विक्री ऑर्डर पूर्ण: {{symbol}}'
+    short: '{{exchange}} वर {{symbol}} चे {{quantity}} शेअर्स {{currency price}} दराने विकले. ऑर्डर {{orderId}}. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\nतुमची विक्री ऑर्डर {{orderId}} ({{symbol}} चे {{quantity}} शेअर्स) {{date executedAt format='datetime'}} रोजी {{exchange}} वर प्रति शेअर {{currency price}} दराने पूर्ण झाली.\n\nही ऑर्डर तुम्ही दिली नसल्यास, त्वरित सहाय्याशी संपर्क साधा."
+  TXNX-003:
+    title: 'ऑर्डर नाकारली: {{symbol}}'
+    short: "तुमची {{#if (eq side 'BUY')}}खरेदी{{else}}विक्री{{/if}} ऑर्डर {{orderId}} ({{quantity}} {{symbol}}) नाकारली गेली: {{reason}}. -Zetheta"
+    long: "नमस्कार {{user.name}},\n\nतुमची {{#if (eq side 'BUY')}}खरेदी{{else}}विक्री{{/if}} ऑर्डर {{orderId}} ({{exchange}} वर {{symbol}} चे {{quantity}} शेअर्स) {{date rejectedAt format='datetime'}} रोजी नाकारली गेली.\n\nकारण: {{reason}}\n\nतुमच्या निधीवर किंवा होल्डिंगवर कोणताही परिणाम झालेला नाही."
+  TXNX-004:
+    title: 'लाभांश जमा: {{symbol}}'
+    short: '{{symbol}} कडून {{currency amount}} लाभांश तुमच्या बँक खात्यात (शेवटचे अंक {{bankAccountLast4}}) जमा झाला. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{symbol}} कडून रेकॉर्ड तारीख {{date recordDate}} साठी {{currency amount}} ({{currency perShare}} प्रति शेअर) लाभांश {{date creditedAt format='datetime'}} रोजी तुमच्या बँक खात्यात (शेवटचे अंक {{bankAccountLast4}}) जमा झाला."
+  TXNX-005:
+    title: 'निधी जमा: {{currency amount}}'
+    short: '{{mode}} द्वारे {{currency amount}} प्राप्त झाले (संदर्भ {{referenceId}}).{{#if availableBalance}} उपलब्ध शिल्लक: {{currency availableBalance}}.{{/if}} -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{date depositedAt format='datetime'}} रोजी {{mode}} द्वारे {{currency amount}} प्राप्त झाले. संदर्भ: {{referenceId}}.{{#if availableBalance}}\n\nतुमची उपलब्ध शिल्लक आता {{currency availableBalance}} आहे.{{/if}}"
+  RISK-001:
+    title: 'तातडीचे: मार्जिन कॉल'
+    short: "तातडीचा मार्जिन कॉल: आवश्यक {{currency marginRequired}}, उपलब्ध {{currency marginAvailable}}. स्क्वेअर-ऑफ टाळण्यासाठी {{date deadline format='datetime'}} पर्यंत निधी जोडा. -Zetheta"
+    long: "नमस्कार {{user.name}},\n\nतुमच्या खात्यावर मार्जिन कॉल आला आहे.\n\nआवश्यक मार्जिन: {{currency marginRequired}}\nउपलब्ध मार्जिन: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% वापर)\n\nकृपया {{date deadline format='datetime'}} पूर्वी निधी जोडा किंवा पोझिशन कमी करा, अन्यथा पोझिशन पूर्वसूचनेशिवाय स्क्वेअर-ऑफ केल्या जाऊ शकतात."
+  RISK-002:
+    title: 'तातडीचे: मार्जिन तूट {{currency shortfallAmount}}'
+    short: "तातडीचे: {{currency shortfallAmount}} मार्जिन तूट. {{date deadline format='datetime'}} पर्यंत निधी जोडा, अन्यथा पोझिशन स्क्वेअर-ऑफ होऊ शकतात. -Zetheta"
+    long: "नमस्कार {{user.name}},\n\nतुमच्या खात्यात {{currency shortfallAmount}} ची मार्जिन तूट आहे.\n\nआवश्यक मार्जिन: {{currency marginRequired}}\nउपलब्ध मार्जिन: {{currency marginAvailable}}\n\nस्क्वेअर-ऑफ टाळण्यासाठी कृपया {{date deadline format='datetime'}} पूर्वी तूट भरून काढा."
+  RISK-003:
+    title: 'पोझिशन स्क्वेअर-ऑफ: {{symbol}}'
+    short: '{{symbol}} चे {{quantity}} शेअर्स {{currency price}} दराने स्क्वेअर-ऑफ झाले ({{reason}}). नफा/तोटा: {{currency realisedPnl}}. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{symbol}} मधील तुमची {{quantity}} शेअर्सची पोझिशन {{date squaredOffAt format='datetime'}} रोजी {{currency price}} दराने स्क्वेअर-ऑफ करण्यात आली.\n\nकारण: {{reason}}\nप्रत्यक्ष नफा/तोटा: {{currency realisedPnl}}\n\nऑर्डर संदर्भ: {{orderId}}."
+  RISK-004:
+    title: 'पोर्टफोलिओ जोखीम सूचना: {{metric}}'
+    short: 'तुमच्या पोर्टफोलिओचा {{metric}} {{number value decimals=2}} आहे, जो तुमच्या मर्यादा {{number threshold decimals=2}} पेक्षा जास्त आहे. कृपया आढावा घ्या. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\nतुमच्या पोर्टफोलिओचा {{metric}} {{number value decimals=2}} वर पोहोचला आहे, जो तुमच्या सूचना मर्यादा {{number threshold decimals=2}} पेक्षा जास्त आहे.{{#if portfolioValue}}\n\nसध्याचे पोर्टफोलिओ मूल्य: {{currency portfolioValue}}.{{/if}}\n\nकृपया तुमच्या पोझिशनचा आढावा घ्या."
+  RISK-005:
+    title: 'केंद्रीकरण सूचना: {{holding}}'
+    short: '{{holding}} तुमच्या पोर्टफोलिओचा {{percent concentrationPercent}} आहे (मर्यादा {{percent thresholdPercent}}). विविधीकरणाचा विचार करा. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{date asOf}} रोजी {{holding}} तुमच्या पोर्टफोलिओचा {{percent concentrationPercent}} आहे, जो तुमच्या मर्यादा {{percent thresholdPercent}} पेक्षा जास्त आहे.\n\nवैविध्यपूर्ण पोर्टफोलिओ जोखीम कमी करू शकतो."
+  SIPX-001:
+    title: 'SIP देय तारीख {{date dueDate}}'
+    short: '{{fundName}} मधील तुमची {{currency amount}} ची SIP {{date dueDate}} रोजी देय आहे. कृपया पुरेशी शिल्लक ठेवा. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{fundName}} मधील तुमची {{currency amount}} ची SIP {{date dueDate}} रोजी देय आहे.\n\nहप्ता अयशस्वी होऊ नये म्हणून कृपया लिंक केलेल्या बँक खात्यात पुरेशी शिल्लक ठेवा."
+  SIPX-002:
+    title: 'SIP पूर्ण: {{fundName}}'
+    short: '{{fundName}} मधील {{currency amount}} ची SIP पूर्ण: {{number units}} युनिट्स, NAV {{currency nav}}. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{fundName}} मधील तुमचा {{currency amount}} चा SIP हप्ता {{date executedAt format='datetime'}} रोजी पूर्ण झाला.\n\nवाटप केलेली युनिट्स: {{number units}}\nNAV: {{currency nav}}"
+  SIPX-003:
+    title: 'SIP अयशस्वी: {{fundName}}'
+    short: '{{fundName}} मधील तुमची {{currency amount}} ची SIP अयशस्वी झाली: {{reason}}.{{#if nextAttemptDate}} पुढील प्रयत्न {{date nextAttemptDate}} रोजी.{{/if}} -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{fundName}} मधील तुमचा {{currency amount}} चा SIP हप्ता {{date failedAt format='datetime'}} रोजी प्रक्रिया होऊ शकला नाही.\n\nकारण: {{reason}}{{#if nextAttemptDate}}\n\nआम्ही {{date nextAttemptDate}} रोजी पुन्हा प्रयत्न करू.{{/if}}\n\nकृपया तुमची बँक शिल्लक आणि मँडेट स्थिती तपासा."
+  SIPX-004:
+    title: '{{fundName}} मधील SIP वाढवा'
+    short: '{{date effectiveDate}} पासून तुमची {{fundName}} SIP {{currency currentAmount}} वरून {{currency suggestedAmount}} पर्यंत वाढवा. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\nतुम्ही {{date effectiveDate}} पासून {{fundName}} मधील तुमची SIP {{currency currentAmount}} वरून {{currency suggestedAmount}} पर्यंत वाढवू शकता.\n\nम्युच्युअल फंड गुंतवणूक बाजारातील जोखमींच्या अधीन आहे. सर्व योजना-संबंधित कागदपत्रे काळजीपूर्वक वाचा."
+  SIPX-005:
+    title: 'उद्दिष्ट टप्पा: {{goalName}} चे {{milestonePercent}}%'
+    short: 'तुम्ही तुमच्या {{goalName}} उद्दिष्टाचे {{milestonePercent}}% गाठले आहे: {{currency targetValue}} पैकी {{currency currentValue}}. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\nअभिनंदन! तुमचे {{goalName}} उद्दिष्ट {{milestonePercent}}% पूर्ण झाले आहे.\n\nसध्याचे मूल्य: {{currency currentValue}}\nलक्ष्य: {{currency targetValue}}"
+  MKTX-001:
+    title: "किंमत सूचना: {{symbol}} {{currency triggerPrice}} च्या {{#if (eq direction 'ABOVE')}}वर{{else}}खाली{{/if}}"
+    short: "किंमत सूचना: {{symbol}} ({{exchange}}) {{currency currentPrice}} वर आहे, तुमच्या ट्रिगर {{currency triggerPrice}} च्या {{#if (eq direction 'ABOVE')}}वर{{else}}खाली{{/if}}. -Zetheta"
+    long: "नमस्कार {{user.name}},\n\nतुमची किंमत सूचना {{alertId}} {{date triggeredAt format='datetime'}} रोजी ट्रिगर झाली.\n\n{{symbol}} ({{exchange}}) {{currency currentPrice}} वर व्यवहार करत आहे, जे तुमच्या ट्रिगर किंमत {{currency triggerPrice}} च्या {{#if (eq direction 'ABOVE')}}वर{{else}}खाली{{/if}} आहे."
+  MKTX-002:
+    title: 'सर्किट लागले: {{symbol}}'
+    short: "{{exchange}} वर {{symbol}} ला {{#if (eq circuitType 'UPPER')}}अप्पर{{else if (eq circuitType 'LOWER')}}लोअर{{else}}मार्केट-वाइड{{/if}} सर्किट ({{percent limitPercent}}) लागले. -Zetheta"
+    long: "नमस्कार {{user.name}},\n\n{{date hitAt format='datetime'}} रोजी {{exchange}} वर {{symbol}} ला {{percent limitPercent}} ची {{#if (eq circuitType 'UPPER')}}अप्पर{{else if (eq circuitType 'LOWER')}}लोअर{{else}}मार्केट-वाइड{{/if}} सर्किट मर्यादा लागली.\n\nसर्किट शिथिल होईपर्यंत व्यवहार मर्यादित असू शकतात."
+  MKTX-003:
+    title: "{{exchange}} {{#if (eq session 'OPEN')}}बाजार उघडला{{else if (eq session 'CLOSE')}}बाजार बंद{{else}}प्री-ओपन सत्र{{/if}}"
+    short: "{{exchange}} {{#if (eq session 'OPEN')}}बाजार उघडला{{else if (eq session 'CLOSE')}}बाजार बंद झाला{{else}}प्री-ओपन सुरू झाले{{/if}}: {{date at format='time'}}.{{#if changePercent}} {{indexName}}: {{percent changePercent}}.{{/if}} -Zetheta"
+    long: "नमस्कार {{user.name}},\n\n{{date at}} रोजी {{date at format='time'}} वाजता {{exchange}} {{#if (eq session 'OPEN')}}बाजार उघडला{{else if (eq session 'CLOSE')}}बाजार बंद झाला{{else}}प्री-ओपन सत्र सुरू झाले{{/if}}.{{#if changePercent}}\n\n{{indexName}} मधील बदल: {{percent changePercent}}.{{/if}}"
+  MKTX-004:
+    title: "{{symbol}} 52-आठवड्यांच्या {{#if (eq extreme 'HIGH')}}उच्चांकावर{{else}}नीचांकावर{{/if}}"
+    short: "{{exchange}} वर {{symbol}} ने {{currency price}} चा 52-आठवड्यांचा {{#if (eq extreme 'HIGH')}}उच्चांक{{else}}नीचांक{{/if}} गाठला. -Zetheta"
+    long: "नमस्कार {{user.name}},\n\n{{date tradeDate}} रोजी {{exchange}} वर {{symbol}} ने {{currency price}} चा 52-आठवड्यांचा {{#if (eq extreme 'HIGH')}}उच्चांक{{else}}नीचांक{{/if}} गाठला.\n\nरोख्यांमधील गुंतवणूक बाजारातील जोखमींच्या अधीन आहे."
+  MKTX-005:
+    title: 'निकाल: {{companyName}} {{quarter}}'
+    short: '{{companyName}} ({{symbol}}) {{date announcementDate}} रोजी {{quarter}} चे निकाल जाहीर करेल. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{companyName}} ({{symbol}}) {{date announcementDate}} रोजी {{quarter}} चे निकाल जाहीर करेल.\n\nरोख्यांमधील गुंतवणूक बाजारातील जोखमींच्या अधीन आहे."
+  REGX-001:
+    title: 'KYC {{daysRemaining}} दिवसांत संपत आहे'
+    short: 'तुमचे KYC {{date expiryDate}} रोजी संपत आहे ({{daysRemaining}} दिवस). खाते निर्बंध टाळण्यासाठी ते अद्ययावत करा. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\nतुमचे {{kycType}} KYC {{date expiryDate}} रोजी संपत आहे ({{daysRemaining}} दिवस शिल्लक).\n\nखात्यावरील निर्बंध टाळण्यासाठी कृपया तुमचे KYC अद्ययावत करा."
+  REGX-002:
+    title: 'तुमच्या नॉमिनीचे तपशील अद्ययावत करा'
+    short: 'कृपया {{date dueDate}} पर्यंत तुमच्या {{accountType}} खात्यासाठी नॉमिनीचे तपशील जोडा किंवा पुष्टी करा. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\nकृपया {{date dueDate}} पर्यंत तुमच्या {{accountType}} खात्यासाठी नॉमिनीचे तपशील जोडा किंवा पुष्टी करा.\n\nतुम्ही ॲपच्या प्रोफाइल विभागातून हे अद्ययावत करू शकता."
+  REGX-003:
+    title: 'कॉन्ट्रॅक्ट नोट {{contractNoteId}}'
+    short: '{{date tradeDate}} च्या व्यवहारांसाठी कॉन्ट्रॅक्ट नोट {{contractNoteId}} उपलब्ध आहे. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{date tradeDate}} रोजीच्या तुमच्या व्यवहारांसाठी कॉन्ट्रॅक्ट नोट {{contractNoteId}} तयार झाली आहे.\n\nडाउनलोड: {{documentUrl}}"
+  REGX-004:
+    title: 'आर्थिक वर्ष {{financialYear}} चे कर विवरण'
+    short: 'आर्थिक वर्ष {{financialYear}} चे तुमचे {{statementType}} विवरण उपलब्ध आहे. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\nआर्थिक वर्ष {{financialYear}} चे तुमचे {{statementType}} विवरण तयार आहे.\n\nडाउनलोड: {{documentUrl}}"
+  REGX-005:
+    title: 'धोरण अद्यतन: {{policyTitle}}'
+    short: '{{date effectiveDate}} पासून लागू धोरण अद्यतन: {{policyTitle}}. -Zetheta'
+    long: "नमस्कार {{user.name}},\n\n{{policyTitle}} ({{date effectiveDate}} पासून लागू)\n\n{{summary}}{{#if referenceUrl}}\n\nतपशील: {{referenceUrl}}{{/if}}"
+  SYS-DIGEST:
+    title: 'तुमचे {{count}} अपडेट्स'
+    short: 'तुमचे {{count}} अपडेट्स: {{#each items}}{{title}}; {{/each}}-Zetheta'
+    long: "नमस्कार {{user.name}},\n\nतुमच्या {{count}} अपडेट्सचा सारांश:\n\n{{#each items}}- {{title}}\n{{/each}}\nतपशीलासाठी ॲप उघडा."

@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20.19.6'
+
+jobs:
+  quality:
+    name: Format, lint, typecheck, unit tests, build, audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run build
+      - name: Dependency audit (production dependencies, high+)
+        run: npm audit --omit=dev --audit-level=high
+
+  integration:
+    name: Integration + e2e tests with coverage (real Postgres/Redis/Kafka/RabbitMQ)
+    runs-on: ubuntu-24.04
+    needs: quality
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env: { POSTGRES_DB: zetheta_test, POSTGRES_USER: zetheta, POSTGRES_PASSWORD: test }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U zetheta -d zetheta_test" --health-interval 3s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:7.4.11-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 3s --health-timeout 3s --health-retries 30
+      rabbitmq:
+        image: rabbitmq:4.3.6-management-alpine
+        env:
+          {
+            RABBITMQ_DEFAULT_USER: zetheta,
+            RABBITMQ_DEFAULT_PASS: test,
+            RABBITMQ_DEFAULT_VHOST: zetheta,
+          }
+        ports: ['5672:5672']
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q check_port_connectivity" --health-interval 5s --health-timeout 10s --health-retries 30
+      kafka:
+        image: apache/kafka:4.3.1
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+        ports: ['9092:9092']
+        options: >-
+          --health-cmd "bash -c '</dev/tcp/127.0.0.1/9092'" --health-interval 5s --health-timeout 5s --health-retries 40
+    env:
+      TEST_DATABASE_URL: postgres://zetheta:test@localhost:5432/zetheta_test
+      TEST_REDIS_URL: redis://localhost:6379/6
+      TEST_KAFKA_BROKERS: localhost:9092
+      TEST_RABBITMQ_URL: amqp://zetheta:test@localhost:5672/zetheta
+      DATABASE_URL: postgres://zetheta:test@localhost:5432/zetheta_test
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations
+        run: npx tsx src/infrastructure/database/migrate.ts latest
+      - name: Unit + integration + e2e tests with coverage thresholds
+        run: npm run test:coverage
+      - uses: actions/upload-artifact@v4.6.2
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  secrets:
+    name: Secret scanning
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 git /repo --redact --verbose
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Repository secret/pattern scan
+        run: npm run secrets:scan
+
+  docker:
+    name: Docker image build
+    runs-on: ubuntu-24.04
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: docker/setup-buildx-action@v3.11.1
+      - uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          push: false
+          tags: zetheta-notification-engine:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify the image runs as a non-root user
+        run: |
+          docker build -q -t zetheta-notification-engine:ci .
+          test "$(docker run --rm --entrypoint id zetheta-notification-engine:ci -u)" != "0"
+
+  snyk:
+    name: Snyk dependency scan (optional)
+    runs-on: ubuntu-24.04
+    needs: quality
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Skip when SNYK_TOKEN is not configured
+        if: env.SNYK_TOKEN == ''
+        run: echo "SNYK_TOKEN not configured; skipping Snyk (npm audit runs in the quality job)."
+      - uses: actions/setup-node@v4.4.0
+        if: env.SNYK_TOKEN != ''
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - if: env.SNYK_TOKEN != ''
+        run: npm ci && npx --yes snyk@1.1301.0 test --severity-threshold=high

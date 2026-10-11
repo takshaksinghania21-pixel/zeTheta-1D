@@ -1,0 +1,108 @@
+# Tamil templates. Machine-assisted translation — must be reviewed by a native
+# speaker / compliance before production use. Falls back to English per event.
+locale: ta
+templates:
+  TXNX-001:
+    title: 'வாங்கும் ஆர்டர் நிறைவேறியது: {{symbol}}'
+    short: '{{exchange}}-இல் {{symbol}} {{quantity}} பங்குகள் {{currency price}} விலையில் வாங்கப்பட்டன. ஆர்டர் {{orderId}}. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் வாங்கும் ஆர்டர் {{orderId}} ({{symbol}} {{quantity}} பங்குகள்) {{date executedAt format='datetime'}} அன்று {{exchange}}-இல் ஒரு பங்குக்கு {{currency price}} விலையில் நிறைவேற்றப்பட்டது.\n\nஇந்த ஆர்டரை நீங்கள் செய்யவில்லை எனில், உடனே உதவி மையத்தைத் தொடர்பு கொள்ளவும்."
+  TXNX-002:
+    title: 'விற்கும் ஆர்டர் நிறைவேறியது: {{symbol}}'
+    short: '{{exchange}}-இல் {{symbol}} {{quantity}} பங்குகள் {{currency price}} விலையில் விற்கப்பட்டன. ஆர்டர் {{orderId}}. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் விற்கும் ஆர்டர் {{orderId}} ({{symbol}} {{quantity}} பங்குகள்) {{date executedAt format='datetime'}} அன்று {{exchange}}-இல் ஒரு பங்குக்கு {{currency price}} விலையில் நிறைவேற்றப்பட்டது.\n\nஇந்த ஆர்டரை நீங்கள் செய்யவில்லை எனில், உடனே உதவி மையத்தைத் தொடர்பு கொள்ளவும்."
+  TXNX-003:
+    title: 'ஆர்டர் நிராகரிக்கப்பட்டது: {{symbol}}'
+    short: "உங்கள் {{#if (eq side 'BUY')}}வாங்கும்{{else}}விற்கும்{{/if}} ஆர்டர் {{orderId}} ({{quantity}} {{symbol}}) நிராகரிக்கப்பட்டது: {{reason}}. -Zetheta"
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் {{#if (eq side 'BUY')}}வாங்கும்{{else}}விற்கும்{{/if}} ஆர்டர் {{orderId}} ({{exchange}}-இல் {{symbol}} {{quantity}} பங்குகள்) {{date rejectedAt format='datetime'}} அன்று நிராகரிக்கப்பட்டது.\n\nகாரணம்: {{reason}}\n\nஉங்கள் நிதி அல்லது பங்குகளில் எந்த பாதிப்பும் இல்லை."
+  TXNX-004:
+    title: 'ஈவுத்தொகை வரவு: {{symbol}}'
+    short: '{{symbol}} ஈவுத்தொகை {{currency amount}} உங்கள் வங்கிக் கணக்கில் (கடைசி இலக்கங்கள் {{bankAccountLast4}}) வரவு வைக்கப்பட்டது. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\nபதிவு தேதி {{date recordDate}}-க்கான {{symbol}} ஈவுத்தொகை {{currency amount}} (ஒரு பங்குக்கு {{currency perShare}}) {{date creditedAt format='datetime'}} அன்று உங்கள் வங்கிக் கணக்கில் (கடைசி இலக்கங்கள் {{bankAccountLast4}}) வரவு வைக்கப்பட்டது."
+  TXNX-005:
+    title: 'நிதி சேர்க்கப்பட்டது: {{currency amount}}'
+    short: '{{mode}} மூலம் {{currency amount}} பெறப்பட்டது (குறிப்பு {{referenceId}}).{{#if availableBalance}} இருப்பு: {{currency availableBalance}}.{{/if}} -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{date depositedAt format='datetime'}} அன்று {{mode}} மூலம் {{currency amount}} பெறப்பட்டது. குறிப்பு: {{referenceId}}.{{#if availableBalance}}\n\nஉங்கள் கிடைக்கும் இருப்பு இப்போது {{currency availableBalance}}.{{/if}}"
+  RISK-001:
+    title: 'அவசரம்: மார்ஜின் அழைப்பு'
+    short: "அவசர மார்ஜின் அழைப்பு: தேவை {{currency marginRequired}}, இருப்பு {{currency marginAvailable}}. {{date deadline format='datetime'}}-க்குள் நிதி சேர்க்கவும். -Zetheta"
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் கணக்கிற்கு மார்ஜின் அழைப்பு விடுக்கப்பட்டுள்ளது.\n\nதேவையான மார்ஜின்: {{currency marginRequired}}\nகிடைக்கும் மார்ஜின்: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% பயன்பாடு)\n\n{{date deadline format='datetime'}}-க்கு முன் நிதி சேர்க்கவும் அல்லது பொசிஷன்களைக் குறைக்கவும்; இல்லையெனில் முன்னறிவிப்பின்றி பொசிஷன்கள் ஸ்கொயர்-ஆஃப் செய்யப்படலாம்."
+  RISK-002:
+    title: 'அவசரம்: மார்ஜின் பற்றாக்குறை {{currency shortfallAmount}}'
+    short: "அவசரம்: {{currency shortfallAmount}} மார்ஜின் பற்றாக்குறை. {{date deadline format='datetime'}}-க்குள் நிதி சேர்க்கவும். -Zetheta"
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் கணக்கில் {{currency shortfallAmount}} மார்ஜின் பற்றாக்குறை உள்ளது.\n\nதேவையான மார்ஜின்: {{currency marginRequired}}\nகிடைக்கும் மார்ஜின்: {{currency marginAvailable}}\n\nஸ்கொயர்-ஆஃப் தவிர்க்க {{date deadline format='datetime'}}-க்கு முன் பற்றாக்குறையை நிரப்பவும்."
+  RISK-003:
+    title: 'பொசிஷன் ஸ்கொயர்-ஆஃப்: {{symbol}}'
+    short: '{{symbol}} {{quantity}} பங்குகள் {{currency price}} விலையில் ஸ்கொயர்-ஆஃப் ({{reason}}). லாபம்/நஷ்டம்: {{currency realisedPnl}}. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{symbol}}-இல் உங்கள் {{quantity}} பங்கு பொசிஷன் {{date squaredOffAt format='datetime'}} அன்று {{currency price}} விலையில் ஸ்கொயர்-ஆஃப் செய்யப்பட்டது.\n\nகாரணம்: {{reason}}\nஉணரப்பட்ட லாபம்/நஷ்டம்: {{currency realisedPnl}}\n\nஆர்டர் குறிப்பு: {{orderId}}."
+  RISK-004:
+    title: 'போர்ட்ஃபோலியோ அபாய எச்சரிக்கை: {{metric}}'
+    short: 'உங்கள் போர்ட்ஃபோலியோ {{metric}} {{number value decimals=2}}, உங்கள் வரம்பு {{number threshold decimals=2}}-ஐ மீறியுள்ளது. சரிபார்க்கவும். -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் போர்ட்ஃபோலியோ {{metric}} {{number value decimals=2}}-ஐ எட்டியுள்ளது; இது உங்கள் எச்சரிக்கை வரம்பு {{number threshold decimals=2}}-ஐ மீறுகிறது.{{#if portfolioValue}}\n\nதற்போதைய போர்ட்ஃபோலியோ மதிப்பு: {{currency portfolioValue}}.{{/if}}\n\nஉங்கள் பொசிஷன்களை மறுபரிசீலனை செய்யவும்."
+  RISK-005:
+    title: 'செறிவு எச்சரிக்கை: {{holding}}'
+    short: '{{holding}} உங்கள் போர்ட்ஃபோலியோவில் {{percent concentrationPercent}} (வரம்பு {{percent thresholdPercent}}). பல்வகைப்படுத்தலைக் கருதவும். -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{date asOf}} நிலவரப்படி {{holding}} உங்கள் போர்ட்ஃபோலியோவில் {{percent concentrationPercent}} ஆகும்; இது உங்கள் வரம்பு {{percent thresholdPercent}}-ஐ விட அதிகம்.\n\nபல்வகைப்பட்ட போர்ட்ஃபோலியோ அபாயத்தைக் குறைக்கும்."
+  SIPX-001:
+    title: 'SIP செலுத்த வேண்டிய தேதி {{date dueDate}}'
+    short: '{{fundName}}-இல் உங்கள் {{currency amount}} SIP {{date dueDate}} அன்று செலுத்த வேண்டும். போதுமான இருப்பு வைக்கவும். -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{fundName}}-இல் உங்கள் {{currency amount}} SIP {{date dueDate}} அன்று செலுத்த வேண்டும்.\n\nதவணை தோல்வியடையாமல் இருக்க இணைக்கப்பட்ட வங்கிக் கணக்கில் போதுமான இருப்பு வைக்கவும்."
+  SIPX-002:
+    title: 'SIP நிறைவேறியது: {{fundName}}'
+    short: '{{fundName}}-இல் {{currency amount}} SIP நிறைவு: {{number units}} யூனிட்கள், NAV {{currency nav}}. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{fundName}}-இல் உங்கள் {{currency amount}} SIP தவணை {{date executedAt format='datetime'}} அன்று நிறைவேற்றப்பட்டது.\n\nஒதுக்கப்பட்ட யூனிட்கள்: {{number units}}\nNAV: {{currency nav}}"
+  SIPX-003:
+    title: 'SIP தோல்வி: {{fundName}}'
+    short: '{{fundName}}-இல் உங்கள் {{currency amount}} SIP தோல்வியடைந்தது: {{reason}}.{{#if nextAttemptDate}} அடுத்த முயற்சி {{date nextAttemptDate}}.{{/if}} -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{fundName}}-இல் உங்கள் {{currency amount}} SIP தவணை {{date failedAt format='datetime'}} அன்று செயல்படுத்த முடியவில்லை.\n\nகாரணம்: {{reason}}{{#if nextAttemptDate}}\n\n{{date nextAttemptDate}} அன்று மீண்டும் முயற்சிப்போம்.{{/if}}\n\nஉங்கள் வங்கி இருப்பு மற்றும் மேண்டேட் நிலையைச் சரிபார்க்கவும்."
+  SIPX-004:
+    title: '{{fundName}}-இல் உங்கள் SIP-ஐ உயர்த்துங்கள்'
+    short: '{{date effectiveDate}} முதல் உங்கள் {{fundName}} SIP-ஐ {{currency currentAmount}}-இலிருந்து {{currency suggestedAmount}}-ஆக உயர்த்துங்கள். -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{date effectiveDate}} முதல் {{fundName}}-இல் உங்கள் SIP-ஐ {{currency currentAmount}}-இலிருந்து {{currency suggestedAmount}}-ஆக உயர்த்தலாம்.\n\nமியூச்சுவல் ஃபண்ட் முதலீடுகள் சந்தை அபாயங்களுக்கு உட்பட்டவை. திட்ட ஆவணங்களை கவனமாகப் படிக்கவும்."
+  SIPX-005:
+    title: 'இலக்கு மைல்கல்: {{goalName}} {{milestonePercent}}%'
+    short: 'உங்கள் இலக்கு {{goalName}}-இன் {{milestonePercent}}% அடைந்துவிட்டீர்கள்: {{currency targetValue}}-இல் {{currency currentValue}}. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\nவாழ்த்துகள்! உங்கள் இலக்கு {{goalName}} {{milestonePercent}}% நிறைவடைந்துள்ளது.\n\nதற்போதைய மதிப்பு: {{currency currentValue}}\nஇலக்கு: {{currency targetValue}}"
+  MKTX-001:
+    title: "விலை எச்சரிக்கை: {{symbol}} {{currency triggerPrice}}-க்கு {{#if (eq direction 'ABOVE')}}மேல்{{else}}கீழ்{{/if}}"
+    short: "விலை எச்சரிக்கை: {{symbol}} ({{exchange}}) {{currency currentPrice}}, உங்கள் தூண்டல் {{currency triggerPrice}}-க்கு {{#if (eq direction 'ABOVE')}}மேல்{{else}}கீழ்{{/if}}. -Zetheta"
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் விலை எச்சரிக்கை {{alertId}} {{date triggeredAt format='datetime'}} அன்று தூண்டப்பட்டது.\n\n{{symbol}} ({{exchange}}) {{currency currentPrice}}-இல் வர்த்தகமாகிறது; இது உங்கள் தூண்டல் விலை {{currency triggerPrice}}-க்கு {{#if (eq direction 'ABOVE')}}மேல்{{else}}கீழ்{{/if}}."
+  MKTX-002:
+    title: 'சர்க்யூட் தொட்டது: {{symbol}}'
+    short: "{{exchange}}-இல் {{symbol}} {{#if (eq circuitType 'UPPER')}}மேல்{{else if (eq circuitType 'LOWER')}}கீழ்{{else}}சந்தை முழுவதும்{{/if}} சர்க்யூட்டை ({{percent limitPercent}}) தொட்டது. -Zetheta"
+    long: "வணக்கம் {{user.name}},\n\n{{date hitAt format='datetime'}} அன்று {{exchange}}-இல் {{symbol}} {{percent limitPercent}} {{#if (eq circuitType 'UPPER')}}மேல்{{else if (eq circuitType 'LOWER')}}கீழ்{{else}}சந்தை முழுவதும்{{/if}} சர்க்யூட் வரம்பைத் தொட்டது.\n\nசர்க்யூட் தளர்த்தப்படும் வரை வர்த்தகம் கட்டுப்படுத்தப்படலாம்."
+  MKTX-003:
+    title: "{{exchange}} {{#if (eq session 'OPEN')}}சந்தை திறப்பு{{else if (eq session 'CLOSE')}}சந்தை முடிவு{{else}}முன்-திறப்பு அமர்வு{{/if}}"
+    short: "{{exchange}} {{#if (eq session 'OPEN')}}சந்தை திறந்தது{{else if (eq session 'CLOSE')}}சந்தை முடிந்தது{{else}}முன்-திறப்பு தொடங்கியது{{/if}}: {{date at format='time'}}.{{#if changePercent}} {{indexName}}: {{percent changePercent}}.{{/if}} -Zetheta"
+    long: "வணக்கம் {{user.name}},\n\n{{date at}} அன்று {{date at format='time'}} மணிக்கு {{exchange}} {{#if (eq session 'OPEN')}}சந்தை திறந்தது{{else if (eq session 'CLOSE')}}சந்தை முடிந்தது{{else}}முன்-திறப்பு அமர்வு தொடங்கியது{{/if}}.{{#if changePercent}}\n\n{{indexName}} மாற்றம்: {{percent changePercent}}.{{/if}}"
+  MKTX-004:
+    title: "{{symbol}} 52 வார {{#if (eq extreme 'HIGH')}}உச்சம்{{else}}தாழ்வு{{/if}}"
+    short: "{{exchange}}-இல் {{symbol}} {{currency price}} என்ற 52 வார {{#if (eq extreme 'HIGH')}}உச்சத்தை{{else}}தாழ்வை{{/if}} தொட்டது. -Zetheta"
+    long: "வணக்கம் {{user.name}},\n\n{{date tradeDate}} அன்று {{exchange}}-இல் {{symbol}} {{currency price}} என்ற 52 வார {{#if (eq extreme 'HIGH')}}உச்சத்தை{{else}}தாழ்வை{{/if}} தொட்டது.\n\nபங்குச் சந்தை முதலீடுகள் சந்தை அபாயங்களுக்கு உட்பட்டவை."
+  MKTX-005:
+    title: 'வருவாய் அறிவிப்பு: {{companyName}} {{quarter}}'
+    short: '{{companyName}} ({{symbol}}) {{quarter}} முடிவுகளை {{date announcementDate}} அன்று அறிவிக்கும். -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{companyName}} ({{symbol}}) தனது {{quarter}} முடிவுகளை {{date announcementDate}} அன்று அறிவிக்கும்.\n\nபங்குச் சந்தை முதலீடுகள் சந்தை அபாயங்களுக்கு உட்பட்டவை."
+  REGX-001:
+    title: 'KYC {{daysRemaining}} நாட்களில் காலாவதி'
+    short: 'உங்கள் KYC {{date expiryDate}} அன்று காலாவதியாகிறது ({{daysRemaining}} நாட்கள்). கணக்கு கட்டுப்பாடுகளைத் தவிர்க்கப் புதுப்பிக்கவும். -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் {{kycType}} KYC {{date expiryDate}} அன்று காலாவதியாகிறது ({{daysRemaining}} நாட்கள் மீதம்).\n\nகணக்கு கட்டுப்பாடுகளைத் தவிர்க்க உங்கள் KYC-ஐப் புதுப்பிக்கவும்."
+  REGX-002:
+    title: 'நாமினி விவரங்களைப் புதுப்பிக்கவும்'
+    short: '{{date dueDate}}-க்குள் உங்கள் {{accountType}} கணக்கிற்கான நாமினி விவரங்களைச் சேர்க்கவும் அல்லது உறுதிப்படுத்தவும். -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{date dueDate}}-க்குள் உங்கள் {{accountType}} கணக்கிற்கான நாமினி விவரங்களைச் சேர்க்கவும் அல்லது உறுதிப்படுத்தவும்.\n\nசெயலியின் சுயவிவரப் பகுதியில் இதைப் புதுப்பிக்கலாம்."
+  REGX-003:
+    title: 'ஒப்பந்தக் குறிப்பு {{contractNoteId}}'
+    short: '{{date tradeDate}} வர்த்தகங்களுக்கான ஒப்பந்தக் குறிப்பு {{contractNoteId}} கிடைக்கிறது. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{date tradeDate}} அன்றைய உங்கள் வர்த்தகங்களுக்கான ஒப்பந்தக் குறிப்பு {{contractNoteId}} உருவாக்கப்பட்டது.\n\nபதிவிறக்கம்: {{documentUrl}}"
+  REGX-004:
+    title: 'நிதியாண்டு {{financialYear}} வரி அறிக்கை'
+    short: 'நிதியாண்டு {{financialYear}}-க்கான உங்கள் {{statementType}} அறிக்கை கிடைக்கிறது. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\nநிதியாண்டு {{financialYear}}-க்கான உங்கள் {{statementType}} அறிக்கை தயாராக உள்ளது.\n\nபதிவிறக்கம்: {{documentUrl}}"
+  REGX-005:
+    title: 'கொள்கை புதுப்பிப்பு: {{policyTitle}}'
+    short: '{{date effectiveDate}} முதல் அமலாகும் கொள்கை புதுப்பிப்பு: {{policyTitle}}. -Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{policyTitle}} ({{date effectiveDate}} முதல் அமல்)\n\n{{summary}}{{#if referenceUrl}}\n\nவிவரங்கள்: {{referenceUrl}}{{/if}}"
+  SYS-DIGEST:
+    title: 'உங்களுக்கு {{count}} புதுப்பிப்புகள்'
+    short: 'உங்களுக்கு {{count}} புதுப்பிப்புகள்: {{#each items}}{{title}}; {{/each}}-Zetheta'
+    long: "வணக்கம் {{user.name}},\n\n{{count}} புதுப்பிப்புகளின் சுருக்கம்:\n\n{{#each items}}- {{title}}\n{{/each}}\nவிவரங்களுக்கு செயலியைத் திறக்கவும்."
