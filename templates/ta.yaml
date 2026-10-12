@@ -24,8 +24,8 @@ templates:
     long: "வணக்கம் {{user.name}},\n\n{{date depositedAt format='datetime'}} அன்று {{mode}} மூலம் {{currency amount}} பெறப்பட்டது. குறிப்பு: {{referenceId}}.{{#if availableBalance}}\n\nஉங்கள் கிடைக்கும் இருப்பு இப்போது {{currency availableBalance}}.{{/if}}"
   RISK-001:
     title: 'அவசரம்: மார்ஜின் அழைப்பு'
-    short: "அவசர மார்ஜின் அழைப்பு: தேவை {{currency marginRequired}}, இருப்பு {{currency marginAvailable}}. {{date deadline format='datetime'}}-க்குள் நிதி சேர்க்கவும். -Zetheta"
-    long: "வணக்கம் {{user.name}},\n\nஉங்கள் கணக்கிற்கு மார்ஜின் அழைப்பு விடுக்கப்பட்டுள்ளது.\n\nதேவையான மார்ஜின்: {{currency marginRequired}}\nகிடைக்கும் மார்ஜின்: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% பயன்பாடு)\n\n{{date deadline format='datetime'}}-க்கு முன் நிதி சேர்க்கவும் அல்லது பொசிஷன்களைக் குறைக்கவும்; இல்லையெனில் முன்னறிவிப்பின்றி பொசிஷன்கள் ஸ்கொயர்-ஆஃப் செய்யப்படலாம்."
+    short: "அவசர மார்ஜின் அழைப்பு: தேவை {{currency requiredMargin}}, இருப்பு {{currency currentMargin}}. {{date deadline format='datetime'}}-க்குள் நிதி சேர்க்கவும். -Zetheta"
+    long: "வணக்கம் {{user.name}},\n\nஉங்கள் கணக்கிற்கு மார்ஜின் அழைப்பு விடுக்கப்பட்டுள்ளது.\n\nஉங்கள் கணக்கில் {{currency shortfallAmount}} மார்ஜின் பற்றாக்குறை உள்ளது.\n\nதேவையான மார்ஜின்: {{currency requiredMargin}}\nகிடைக்கும் மார்ஜின்: {{currency currentMargin}}\n\n{{date deadline format='datetime'}}-க்கு முன் நிதி சேர்க்கவும் அல்லது பொசிஷன்களைக் குறைக்கவும்; இல்லையெனில் முன்னறிவிப்பின்றி பொசிஷன்கள் ஸ்கொயர்-ஆஃப் செய்யப்படலாம்."
   RISK-002:
     title: 'அவசரம்: மார்ஜின் பற்றாக்குறை {{currency shortfallAmount}}'
     short: "அவசரம்: {{currency shortfallAmount}} மார்ஜின் பற்றாக்குறை. {{date deadline format='datetime'}}-க்குள் நிதி சேர்க்கவும். -Zetheta"

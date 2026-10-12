@@ -8,6 +8,7 @@ describe('routing engine', () => {
     const h = createHarness(DAY);
     const plan = await h.engine.route(h.input('TXNX-001'));
     expect(plan.plans.map((p) => [p.channel, p.action])).toEqual([
+      ['sms', 'QUEUE'],
       ['push', 'QUEUE'],
       ['email', 'QUEUE'],
       ['inapp', 'QUEUE'],
@@ -49,13 +50,13 @@ describe('routing engine', () => {
       }),
     );
     expect(plan.plans.find((p) => p.channel === 'sms')?.action).toBe('SUPPRESS');
-    expect(plan.plans.find((p) => p.channel === 'email')?.action).toBe('QUEUE');
+    expect(plan.plans.find((p) => p.channel === 'push')?.action).toBe('QUEUE');
   });
 
   it('flags mandatory events that cannot reach any mandatory channel', async () => {
     const h = createHarness(DAY);
     const plan = await h.engine.route(
-      h.input('RISK-002', { contacts: [{ channel: 'push', status: 'ACTIVE' }] }),
+      h.input('RISK-002', { contacts: [] }), // only in-app reachable; it is not mandatory
     );
     expect(plan.decisions.some((d) => d.rule === 'MANDATORY_UNDELIVERABLE')).toBe(true);
   });
@@ -158,8 +159,8 @@ describe('routing engine', () => {
     const h = createHarness(DAY);
     await h.engine.route(h.input('MKTX-001', { payload: { symbol: 'SBIN' } }));
     await h.engine.route(h.input('MKTX-001', { payload: { symbol: 'INFY' } }));
-    await h.engine.route(h.input('MKTX-002', { payload: { symbol: 'TCS' } }));
-    const plan = await h.engine.route(h.input('MKTX-002', { payload: { symbol: 'ITC' } }));
+    await h.engine.route(h.input('MKTX-001', { payload: { symbol: 'TCS' } }));
+    const plan = await h.engine.route(h.input('MKTX-001', { payload: { symbol: 'ITC' } }));
     expect(plan.capHit).toBe(true);
     expect(plan.plans.find((p) => p.channel === 'push')).toMatchObject({
       action: 'CAP',
@@ -172,7 +173,9 @@ describe('routing engine', () => {
     const h = createHarness(DAY);
     for (let i = 0; i < 15; i++) {
       const plan = await h.engine.route(
-        h.input('RISK-001', { payload: { marginCallId: `M${i}` } }),
+        h.input('RISK-001', {
+          payload: { deadline: `2099-01-01T00:00:${String(i).padStart(2, '0')}Z` },
+        }),
       );
       expect(plan.plans.some((p) => p.action === 'CAP')).toBe(false);
     }
@@ -181,9 +184,9 @@ describe('routing engine', () => {
   it('falls back when the primary channel has no contact', async () => {
     const h = createHarness(DAY);
     const plan = await h.engine.route(
-      h.input('TXNX-001', { contacts: ALL_CONTACTS.filter((c) => c.channel !== 'push') }),
+      h.input('TXNX-003', { contacts: ALL_CONTACTS.filter((c) => c.channel !== 'push') }),
     );
-    expect(plan.plans.find((p) => p.channel === 'sms')).toMatchObject({
+    expect(plan.plans.find((p) => p.channel === 'email')).toMatchObject({
       action: 'QUEUE',
       fallbackFor: 'push',
     });
@@ -195,17 +198,17 @@ describe('routing engine', () => {
     const contacts = ALL_CONTACTS.map((c) =>
       c.channel === 'push' ? { ...c, status: 'INVALID' as const } : c,
     );
-    const plan = await h.engine.route(h.input('TXNX-001', { contacts }));
+    const plan = await h.engine.route(h.input('TXNX-003', { contacts }));
     expect(plan.decisions.some((d) => d.rule === 'CONTACT_INVALID')).toBe(true);
-    expect(plan.plans.find((p) => p.channel === 'sms')?.fallbackFor).toBe('push');
+    expect(plan.plans.find((p) => p.channel === 'email')?.fallbackFor).toBe('push');
   });
 
   it('falls back when no healthy provider exists for a channel', async () => {
     const h = createHarness(DAY);
     h.unavailable.add('push');
-    const plan = await h.engine.route(h.input('TXNX-001'));
+    const plan = await h.engine.route(h.input('TXNX-003'));
     expect(plan.plans.find((p) => p.channel === 'push')).toBeUndefined();
-    expect(plan.plans.find((p) => p.channel === 'sms')?.fallbackFor).toBe('push');
+    expect(plan.plans.find((p) => p.channel === 'email')?.fallbackFor).toBe('push');
   });
 
   it('keeps the channel queued for retry when no fallback is possible', async () => {
@@ -218,8 +221,10 @@ describe('routing engine', () => {
   it('does not fall back to a channel the user disabled', async () => {
     const h = createHarness(DAY);
     h.unavailable.add('push');
-    const plan = await h.engine.route(h.input('TXNX-001', { prefs: { channels: { sms: false } } }));
-    expect(plan.plans.find((p) => p.channel === 'sms')).toBeUndefined();
+    const plan = await h.engine.route(
+      h.input('TXNX-003', { prefs: { channels: { email: false } } }),
+    );
+    expect(plan.plans.find((p) => p.channel === 'email')).toBeUndefined();
   });
 
   it('routes away from SMS when the daily budget is exhausted, except for high priority', async () => {
@@ -238,6 +243,15 @@ describe('routing engine', () => {
     const h = createHarness(DAY);
     const plan = await h.engine.route(
       h.input('MKTX-003', {
+        consents: [
+          {
+            channel: 'push',
+            purpose: 'PROMOTIONAL',
+            status: 'GRANTED',
+            recordedAt: new Date(DAY),
+            source: 'test',
+          },
+        ],
         prefs: {
           categories: { MARKET: { channels: ['push', 'inapp'] } },
           digest: {
@@ -259,7 +273,7 @@ describe('routing engine', () => {
   it('records preference blocks for audit', async () => {
     const h = createHarness(DAY);
     const plan = await h.engine.route(
-      h.input('TXNX-001', { prefs: { channels: { email: false } } }),
+      h.input('TXNX-004', { prefs: { channels: { email: false } } }),
     );
     expect(plan.decisions).toEqual(
       expect.arrayContaining([

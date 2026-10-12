@@ -5,43 +5,35 @@ import amqp, {
   type ConsumeMessage,
   type Options,
 } from 'amqplib';
-import { allRetryBands } from '../../modules/retries/backoff';
 import { CHANNELS, type Channel as NotifyChannel } from '../../domain/types';
 import type { Logger } from '../../common/logger';
 
 export interface RabbitTopology {
   deliveryExchange: string;
-  retryExchange: string;
   dlx: string;
   deliveryQueue(channel: NotifyChannel): string;
-  retryQueue(band: number): string;
   dlqQueue: string;
 }
 
 export function rabbitTopology(prefix: string): RabbitTopology {
   return {
     deliveryExchange: `${prefix}delivery`,
-    retryExchange: `${prefix}retry`,
     dlx: `${prefix}dlx`,
     deliveryQueue: (c) => `${prefix}delivery.${c}`,
-    retryQueue: (b) => `${prefix}retry.b${b}`,
     dlqQueue: `${prefix}delivery.dlq`,
   };
 }
 
 export const MAX_PRIORITY = 10;
-export const RETRY_BAND_HEADER = 'retry-band';
 
 /**
  * Declares durable exchanges/queues (idempotent):
  *  - delivery (direct): one priority queue per channel, poison → DLX
- *  - retry (headers): one queue per delay band; expired messages dead-letter
- *    back to the delivery exchange with their original routing key (channel)
  *  - dlx (direct) → delivery.dlq for exhausted/poison messages
+ * Retry delays are scheduled in Redis (modules/retries/retry-scheduler.ts).
  */
 export async function assertTopology(ch: Channel, t: RabbitTopology): Promise<void> {
   await ch.assertExchange(t.deliveryExchange, 'direct', { durable: true });
-  await ch.assertExchange(t.retryExchange, 'headers', { durable: true });
   await ch.assertExchange(t.dlx, 'direct', { durable: true });
   await ch.assertQueue(t.dlqQueue, { durable: true, arguments: { 'x-queue-type': 'classic' } });
   await ch.bindQueue(t.dlqQueue, t.dlx, 'poison');
@@ -58,19 +50,6 @@ export async function assertTopology(ch: Channel, t: RabbitTopology): Promise<vo
       },
     });
     await ch.bindQueue(q, t.deliveryExchange, c);
-  }
-  for (const band of allRetryBands()) {
-    const q = t.retryQueue(band);
-    await ch.assertQueue(q, {
-      durable: true,
-      arguments: { 'x-queue-type': 'classic', 'x-dead-letter-exchange': t.deliveryExchange },
-    });
-    // NB: headers-exchange matching ignores keys starting with "x-", so the band
-    // header must not use that prefix (otherwise every band queue matches).
-    await ch.bindQueue(q, t.retryExchange, '', {
-      'x-match': 'all',
-      [RETRY_BAND_HEADER]: String(band),
-    });
   }
 }
 

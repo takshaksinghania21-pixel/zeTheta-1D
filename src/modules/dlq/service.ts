@@ -22,7 +22,7 @@ export class DeadLetterService {
     private readonly lifecycle: NotificationLifecycle,
     private readonly factory: NotificationFactory,
     private readonly audit: AuditLog,
-    private readonly eventsTopic: string,
+    private readonly topicFor: (eventType: string) => string,
   ) {}
 
   /**
@@ -79,7 +79,7 @@ export class DeadLetterService {
         await enqueueOutbox(trx, [
           {
             destination: 'KAFKA',
-            topic: this.eventsTopic,
+            topic: this.topicFor(event.event_type),
             key: event.user_id,
             payload: message,
             headers: { 'x-correlation-id': event.correlation_id },

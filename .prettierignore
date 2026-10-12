@@ -6,3 +6,6 @@ package-lock.json
 docs/openapi.json
 docs/postman
 reports
+graphify-out
+docs/api-specification.yaml
+data

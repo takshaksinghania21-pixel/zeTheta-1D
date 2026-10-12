@@ -43,7 +43,7 @@ export type NotificationState = (typeof NOTIFICATION_STATES)[number];
 export const SEGMENTS = ['RETAIL', 'HNI', 'NEW_INVESTOR', 'DORMANT'] as const;
 export type Segment = (typeof SEGMENTS)[number];
 
-export const DIGEST_FREQUENCIES = ['DAILY', 'WEEKLY'] as const;
+export const DIGEST_FREQUENCIES = ['HOURLY', 'DAILY', 'WEEKLY'] as const;
 export type DigestFrequency = (typeof DIGEST_FREQUENCIES)[number];
 
 export function isChannel(value: string): value is Channel {

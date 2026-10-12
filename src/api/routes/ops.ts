@@ -20,6 +20,7 @@ const DlqEntrySchema = z
     eventId: z.uuid().nullable(),
     channel: z.string().nullable(),
     reasonCode: z.string(),
+    classification: z.enum(['TRANSIENT', 'PERMANENT', 'CONFIGURATION']).nullable(),
     reasonMessage: z.string(),
     attempts: z.number(),
     retryHistory: z.array(z.unknown()),
@@ -36,12 +37,24 @@ const DlqEntrySchema = z
 const RangeQuery = z.strictObject({
   from: z.iso.datetime({ offset: true }).optional(),
   to: z.iso.datetime({ offset: true }).optional(),
+  /** PDF Appendix A: `period=7d` (or `24h`) ending now; ignored when `from` is given. */
+  period: z
+    .string()
+    .regex(/^\d{1,3}[hd]$/)
+    .optional(),
 });
 
 export function registerOpsRoutes(api: Api, c: Container): void {
   const range = (q: z.infer<typeof RangeQuery>) => {
-    const to = q.to ? new Date(q.to) : new Date(c.clock.now().getTime() + 3600000);
-    const from = q.from ? new Date(q.from) : new Date(to.getTime() - 24 * 3600000 - 3600000);
+    const periodMs = q.period
+      ? Number(q.period.slice(0, -1)) * (q.period.endsWith('d') ? 86400000 : 3600000)
+      : undefined;
+    const to = q.to
+      ? new Date(q.to)
+      : new Date(c.clock.now().getTime() + (periodMs === undefined ? 3600000 : 0));
+    const from = q.from
+      ? new Date(q.from)
+      : new Date(to.getTime() - (periodMs ?? 24 * 3600000 + 3600000));
     if (from >= to) throw new AppError('VALIDATION_ERROR', 400, '`from` must be before `to`');
     if (to.getTime() - from.getTime() > 93 * 86400000)
       throw new AppError('VALIDATION_ERROR', 400, 'Range may not exceed 93 days');
@@ -60,6 +73,11 @@ export function registerOpsRoutes(api: Api, c: Container): void {
       status: z.enum(['OPEN', 'RETRIED', 'RESOLVED', 'DISCARDED']).optional(),
       source: z.enum(['DELIVERY', 'EVENT', 'POISON']).optional(),
       channel: ChannelEnum.optional(),
+      reason: z
+        .string()
+        .regex(/^[A-Z0-9_]{1,64}$/)
+        .optional(),
+      classification: z.enum(['TRANSIENT', 'PERMANENT', 'CONFIGURATION']).optional(),
       limit: z.coerce.number().int().min(1).max(100).default(20),
       offset: z.coerce.number().int().min(0).max(100000).default(0),
     }),
@@ -189,8 +207,13 @@ export function registerOpsRoutes(api: Api, c: Container): void {
       const admin = c.kafka().admin();
       try {
         await admin.connect();
-        kafkaLag[groups.events] = await consumerLag(admin, groups.events, c.topics.financialEvents);
-        kafkaLag[groups.analytics] = await consumerLag(admin, groups.analytics, c.topics.lifecycle);
+        kafkaLag[groups.events] = (await consumerLag(admin, groups.events, c.topics.events)).total;
+        kafkaLag[groups.critical] = (
+          await consumerLag(admin, groups.critical, c.topics.critical)
+        ).total;
+        kafkaLag[groups.analytics] = (
+          await consumerLag(admin, groups.analytics, c.topics.lifecycle)
+        ).total;
       } catch {
         kafkaLag[groups.events] = null;
       } finally {
@@ -483,4 +506,55 @@ export function registerOpsRoutes(api: Api, c: Container): void {
   analyticsRoute('summary', 'getAnalyticsSummary', 'All analytics in one response', (r) =>
     c.analytics().summary(r, c.clock.now()),
   );
+  analyticsRoute(
+    'channel-performance',
+    'getChannelPerformance',
+    'Per-channel delivery, read/click, latency percentiles and cost (PDF Day 10)',
+    (r) => c.analytics().channelPerformance(r),
+  );
+  analyticsRoute(
+    'opt-out-trends',
+    'getOptOutTrends',
+    'Daily opt-outs by channel/category and the rolling 30-day rate (PDF Day 10)',
+    () => c.analytics().optOutTrends(c.clock.now()),
+  );
+  analyticsRoute(
+    'template-variants',
+    'getTemplateVariants',
+    'A/B test comparison: delivery, read and click rates per template version',
+    (r, q) =>
+      c.analytics().templateVariants(r, typeof q.eventType === 'string' ? q.eventType : undefined),
+    {
+      eventType: z
+        .string()
+        .regex(/^[A-Z]{4}-\d{3}$/)
+        .optional(),
+    },
+  );
+  analyticsRoute(
+    'preference-changes',
+    'getPreferenceChanges',
+    'Which preferences users change most often (PDF Day 5)',
+    (r) => c.analytics().preferenceChanges(r),
+  );
+
+  // PDF Appendix A (p.64–65): `GET /analytics/delivery-rates?period=7d&channel=all`.
+  api.route({
+    method: 'get',
+    path: '/analytics/delivery-rates',
+    operationId: 'getDeliveryRatesPdf',
+    summary: 'Delivery and read rates by channel and priority, caps, DND blocks and cost',
+    tags: ['Analytics'],
+    auth: { permission: 'analytics:read' },
+    query: RangeQuery.extend({ channel: z.union([z.literal('all'), z.string()]).default('all') }),
+    responses: {
+      200: { description: 'Appendix A shape', schema: z.record(z.string(), z.unknown()) },
+    },
+    handler: async ({ query }) => {
+      const r = range(query);
+      const channel =
+        query.channel === 'all' ? undefined : query.channel === 'in_app' ? 'inapp' : query.channel;
+      return { status: 200, body: await c.analytics().pdfDeliveryRates(r, channel) };
+    },
+  });
 }

@@ -2,7 +2,6 @@ import 'dotenv/config';
 import http from 'node:http';
 import { Container } from '../container';
 import { enableDefaultMetrics, registry } from '../common/metrics';
-import { setRootLogger } from '../common/logger';
 import { loadConfig } from '../config/env';
 import { CHANNELS, isChannel, type Channel } from '../domain/types';
 import { ensureInfrastructure } from './bootstrap';
@@ -10,6 +9,7 @@ import {
   startAnalytics,
   startDispatcher,
   startDlqIngest,
+  startCriticalEventConsumer,
   startEventConsumer,
   startOutboxRelay,
   startScheduler,
@@ -18,6 +18,7 @@ import {
 
 const ALL = [
   'event-consumer',
+  'critical-consumer',
   'dispatcher',
   'dlq-ingest',
   'outbox-relay',
@@ -40,6 +41,9 @@ export async function startWorkers(
         break;
       case 'event-consumer':
         started.push(await startEventConsumer(c));
+        break;
+      case 'critical-consumer':
+        started.push(await startCriticalEventConsumer(c));
         break;
       case 'dispatcher':
         started.push(await startDispatcher(c, channels));
@@ -72,7 +76,6 @@ export async function stopWorkers(c: Container, workers: RunningWorker[]): Promi
 async function main(): Promise<void> {
   const config = loadConfig();
   const c = new Container(config);
-  setRootLogger(c.logger);
   enableDefaultMetrics(`${config.SERVICE_NAME}-worker`);
   const requested = (process.env.WORKERS ?? process.argv[2] ?? 'all')
     .split(',')

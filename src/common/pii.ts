@@ -1,19 +1,18 @@
 /** PII masking helpers used by logs, API responses and audit metadata. */
 
+/** PDF §A10.2 format: `+91XXXX1234` (country code and last four digits kept). */
 export function maskPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
-  if (digits.length <= 4) return '*'.repeat(digits.length);
-  return `${phone.startsWith('+') ? '+' : ''}${'*'.repeat(digits.length - 4)}${digits.slice(-4)}`;
+  if (digits.length <= 4) return 'X'.repeat(digits.length);
+  const country = phone.startsWith('+') && digits.length > 10 ? `+${digits.slice(0, -10)}` : '';
+  return `${country}XXXX${digits.slice(-4)}`;
 }
 
+/** PDF §A10.2 format: `s***@domain.com`. */
 export function maskEmail(email: string): string {
   const at = email.indexOf('@');
   if (at <= 0) return '***';
-  const local = email.slice(0, at);
-  const domain = email.slice(at + 1);
-  const dot = domain.lastIndexOf('.');
-  const tld = dot >= 0 ? domain.slice(dot) : '';
-  return `${local[0] ?? ''}***@***${tld}`;
+  return `${email[0]}***@${email.slice(at + 1)}`;
 }
 
 export function maskToken(token: string): string {
@@ -41,6 +40,8 @@ const EMAIL_VALUE = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
 const PHONE_VALUE = /(?<![\w-])\+?\d{10,15}(?![\w-])/g;
 const NEVER_MASK = new Set([
   'correlationId',
+  'correlation_id',
+  'request_id',
   'eventId',
   'notificationId',
   'userId',

@@ -25,7 +25,8 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text-summary', 'json-summary', 'lcov', 'text'],
   coverageThreshold: {
-    global: { statements: 80, branches: 70, functions: 80, lines: 80 },
+    // PDF Day 13: "minimum 80% code coverage across the entire codebase" — all four metrics.
+    global: { statements: 80, branches: 80, functions: 80, lines: 80 },
   },
   testTimeout: 30000,
 };

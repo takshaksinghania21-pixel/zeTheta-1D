@@ -27,21 +27,3 @@ export function computeRetryDelay(
 export function canRetry(retriesUsed: number, profile: RetryProfile): boolean {
   return retriesUsed < profile.maxRetries;
 }
-
-/**
- * RabbitMQ delay band for a retry. Each band is a queue whose messages carry a
- * per-message TTL inside [2^k, 2^(k+1)) ms, bounding head-of-line lateness to
- * the band width while preserving the jittered delay.
- */
-export const MIN_BAND = 9; // 512 ms
-export const MAX_BAND = 23; // ~2.3 h
-export function retryBand(delayMs: number): number {
-  if (delayMs <= 1) return MIN_BAND;
-  const k = Math.floor(Math.log2(delayMs));
-  return Math.max(MIN_BAND, Math.min(MAX_BAND, k));
-}
-export function allRetryBands(): number[] {
-  const out: number[] = [];
-  for (let k = MIN_BAND; k <= MAX_BAND; k++) out.push(k);
-  return out;
-}

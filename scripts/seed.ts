@@ -12,6 +12,7 @@ import { loadConfig } from '../src/config/env';
 import { Container } from '../src/container';
 import type { Role } from '../src/domain/types';
 import { loadTemplateSources } from '../src/modules/templates/source';
+import { LANGUAGE_WEIGHTS, prng, quota, syntheticUser } from './synthetic';
 
 interface Credentials {
   admin: { username: string; password: string };
@@ -147,16 +148,14 @@ async function main(): Promise<void> {
         created++;
         // HNI users opt in to WhatsApp; Asha opts in to promotional push/email.
         if (u.segment === 'HNI') {
-          for (const purpose of ['TRANSACTIONAL', 'SERVICE'] as const) {
-            await c.consents().record({
-              userId: row.id,
-              channel: 'whatsapp',
-              purpose,
-              status: 'GRANTED',
-              source: 'APP',
-              recordedBy: 'seed',
-            });
-          }
+          await c.consents().record({
+            userId: row.id,
+            channel: 'whatsapp',
+            purpose: 'TRANSACTIONAL',
+            status: 'GRANTED',
+            source: 'APP',
+            recordedBy: 'seed',
+          });
         }
         if (u.externalRef === 'seed-asha') {
           for (const channel of ['push', 'email', 'sms'] as const) {
@@ -182,12 +181,67 @@ async function main(): Promise<void> {
       creds.demoUser.userId,
     );
 
-    // Synthetic DND fixture: Ravi's number is fully registered; Meera blocks the financial category.
+    // PDF Day 2: 1 000 synthetic users with varied preferences (SEED_BULK_USERS overrides).
+    const bulk = Number(env.SEED_BULK_USERS ?? 1000);
+    const rand = prng(42);
+    const locales = quota(bulk, LANGUAGE_WEIGHTS, rand);
+    const dndBulk: string[] = [];
+    let bulkCreated = 0;
+    for (let i = 0; i < bulk; i++) {
+      const u = syntheticUser(i + 1, locales[i]!, rand);
+      if (i % 10 < 3) dndBulk.push(u.phone); // 30% DND-registered, as in the §B4 dataset
+      const externalRef = `seed-bulk-${u.index}`;
+      if (await db('users').where({ external_ref: externalRef }).first('id')) continue;
+      const user = await c.users().create({
+        externalRef,
+        displayName: u.name,
+        segment: u.segment,
+        locale: u.locale,
+        timezone: 'Asia/Kolkata',
+        contacts: [
+          { channel: 'sms', value: u.phone, verified: true },
+          { channel: 'email', value: u.email, verified: true },
+          { channel: 'push', value: u.pushToken, verified: true },
+        ],
+      });
+      await c.users().updatePreferences(
+        user.id,
+        (p) => ({
+          ...p,
+          quietHours: u.quietHours,
+          channels: Object.fromEntries(u.channelsOff.map((ch) => [ch, false])),
+          ...(u.disabledCategory
+            ? { categories: { [u.disabledCategory]: { enabled: false } } }
+            : {}),
+          ...(u.digest
+            ? {
+                digest: {
+                  enabled: true,
+                  frequency: 'DAILY',
+                  deliveryTime: '08:00',
+                  categories: ['MARKET'],
+                },
+              }
+            : {}),
+        }),
+        'seed',
+      );
+      bulkCreated++;
+    }
+    created += bulkCreated;
+
+    // Synthetic DND fixture: Ravi's number is fully registered; Meera blocks the financial category;
+    // 30% of the bulk users are registered.
     const dnd = await c.dndSource().import({
       source: 'synthetic-fixture',
       snapshotAt: new Date(),
       importedBy: 'seed',
       entries: [
+        ...dndBulk.map((phone) => ({
+          phoneHash: c.users().phoneHash(phone),
+          status: 'FULLY_BLOCKED' as const,
+          blockedCategories: [],
+        })),
         {
           phoneHash: c.users().phoneHash('+919800000004'),
           status: 'FULLY_BLOCKED',

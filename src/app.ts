@@ -14,6 +14,7 @@ import { CORRELATION_HEADER, normaliseCorrelationId, runWithContext } from './co
 import { AppError, RateLimitedError } from './common/errors';
 import { metrics, registry } from './common/metrics';
 import type { Container } from './container';
+import { pdfErrorBody } from './api/pdf-contract';
 import { redisHealthy } from './infrastructure/redis/redis';
 
 export interface ReadinessCheck {
@@ -225,6 +226,31 @@ export function createApp(
       .catch(next);
   };
   app.get('/health/ready', ready);
+  // PDF Day 12: one health endpoint covering the database, Redis, Kafka, RabbitMQ and providers.
+  app.get('/health', (_req, res, next) => {
+    Promise.all([
+      runChecks(checks),
+      c
+        .registry()
+        .status()
+        .catch(() => null),
+    ])
+      .then(([r, providers]) => {
+        const provs = (providers ?? []).map((p) => ({
+          name: p.name,
+          channel: p.channel,
+          enabled: p.enabled,
+          circuit: (p.circuit as { status: string }).status,
+        }));
+        const degraded = providers === null || provs.some((p) => p.enabled && p.circuit === 'OPEN');
+        res.status(r.ok ? 200 : 503).json({
+          status: !r.ok ? 'down' : degraded ? 'degraded' : 'ok',
+          checks: r.results,
+          providers: providers === null ? 'unavailable' : provs,
+        });
+      })
+      .catch(next);
+  });
   app.get('/api/v1/health/ready', ready);
   app.get('/metrics', (_req, res, next) => {
     registry
@@ -238,11 +264,9 @@ export function createApp(
   app.get('/api/v1/openapi.json', (_req, res) => {
     res.json(spec);
   });
-  app.use(
-    '/api/docs',
-    swaggerUi.serve,
-    swaggerUi.setup(spec, { customSiteTitle: 'Zetheta Notification Engine API' }),
-  );
+  const docs = swaggerUi.setup(spec, { customSiteTitle: 'Zetheta Notification Engine API' });
+  app.use('/api-docs', swaggerUi.serve, docs); // PDF Day 13 path
+  app.use('/api/docs', swaggerUi.serve, docs);
   app.use('/api/v1', api.router);
 
   app.use((req, res) => {
@@ -257,6 +281,15 @@ export function createApp(
 
   const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
     const correlationId = res.getHeader('X-Correlation-Id');
+    if (err instanceof AppError && err.expose && res.locals.contract === 'pdf') {
+      if (err instanceof RateLimitedError)
+        res.setHeader('Retry-After', String(err.retryAfterSeconds));
+      const validation = ['VALIDATION_ERROR', 'EVENT_SCHEMA_INVALID', 'UNKNOWN_EVENT_TYPE'];
+      res
+        .status(validation.includes(err.code) ? 422 : err.httpStatus)
+        .json(pdfErrorBody(err.code, err.message, err.details, correlationId));
+      return;
+    }
     if (err instanceof AppError && err.expose) {
       if (err instanceof RateLimitedError)
         res.setHeader('Retry-After', String(err.retryAfterSeconds));

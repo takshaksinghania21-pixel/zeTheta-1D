@@ -62,6 +62,7 @@ export function nextDigestTime(
 ): Date {
   const local = DateTime.fromJSDate(now, { zone: timezone });
   const [h, m] = deliveryTime.split(':').map(Number) as [number, number];
+  if (frequency === 'HOURLY') return local.startOf('hour').plus({ hours: 1 }).toUTC().toJSDate();
   let next = local.set({ hour: h, minute: m, second: 0, millisecond: 0 });
   if (frequency === 'DAILY') {
     if (next <= local) next = next.plus({ days: 1 }).set({ hour: h, minute: m });

@@ -2,7 +2,14 @@ import { z } from 'zod';
 import type { Container } from '../../container';
 import { ForbiddenError, ValidationError } from '../../common/errors';
 import { maskContact } from '../../common/pii';
-import { CHANNELS, CONSENT_PURPOSES, SEGMENTS, type Channel } from '../../domain/types';
+import {
+  CATEGORIES,
+  CHANNELS,
+  CONSENT_PURPOSES,
+  SEGMENTS,
+  type Category,
+  type Channel,
+} from '../../domain/types';
 import { hasPermission, type Permission } from '../../modules/auth/permissions';
 import type { Principal } from '../../modules/auth/service';
 import { isValidTimezone, resolvePreferences } from '../../modules/preferences/resolver';
@@ -11,11 +18,13 @@ import {
   channelPrefsSchema,
   digestPrefsSchema,
   quietHoursSchema,
+  type EffectivePreferences,
   type UserPreferences,
 } from '../../modules/preferences/types';
 import { validateQuietWindow } from '../../modules/scheduling/quiet-hours';
 import type { Api } from '../http';
 import { camel } from '../mappers';
+import { pdfChannel } from '../pdf-contract';
 import { LocaleEnum, UserIdParam, UuidParam } from '../schemas';
 
 const ContactInput = z.strictObject({
@@ -68,9 +77,35 @@ const PreferencesResponse = z
       sources: z.record(z.string(), z.string()),
     }),
     digestSuggestion: z
-      .object({ capHits: z.number(), suggestedFrequency: z.string(), suggestedAt: z.string() })
+      .object({
+        notificationsInWindow: z.number(),
+        suggestedFrequency: z.string(),
+        suggestedAt: z.string(),
+      })
       .nullable(),
     hierarchy: z.array(z.string()),
+    // PDF Appendix A (p.62–63) view of the same preferences.
+    user_id: z.string(),
+    global_preferences: z.object({
+      quiet_hours: z.object({ start: z.string(), end: z.string(), timezone: z.string() }),
+      language: z.string(),
+      digest_mode: z.string(),
+    }),
+    category_preferences: z.array(
+      z.object({
+        category: z.string(),
+        channels: z.record(z.string(), z.boolean()),
+        digest_mode: z.string(),
+      }),
+    ),
+    regulatory_overrides: z.array(
+      z.object({
+        event_type: z.string(),
+        channels: z.array(z.string()),
+        cannot_disable: z.boolean(),
+      }),
+    ),
+    updated_at: z.string(),
   })
   .meta({ id: 'Preferences' });
 const ConsentSchema = z
@@ -99,28 +134,95 @@ export function assertUserAccess(
 
 const ifMatch = z.strictObject({ 'if-match': z.string().regex(/^\d+$/).optional() });
 
+const DIGEST_MODES = ['immediate', 'hourly', 'daily'] as const;
+
+// PDF Appendix A (p.63–64): one category's channels + digest mode per request.
+const PdfPreferenceUpdate = z
+  .strictObject({
+    category: z.string().regex(/^[A-Z]{4}$/),
+    channels: z.strictObject(
+      Object.fromEntries(CHANNELS.map((ch) => [pdfChannel(ch), z.boolean().optional()])),
+    ),
+    digest_mode: z.enum(DIGEST_MODES).optional(),
+  })
+  .meta({ id: 'PdfPreferenceUpdate' });
+
+/** Category prefix used by the PDF (TXNX, RISK, SIPX, MKTX, REGX). */
+function categoryPrefix(c: Container, category: Category): string {
+  return (
+    c.taxonomy
+      .list()
+      .find((d) => d.category === category)
+      ?.code.slice(0, 4) ?? category
+  );
+}
+
+/** PDF Appendix A view of effective preferences (p.62–63). */
+function pdfPreferences(
+  c: Container,
+  userId: string,
+  e: EffectivePreferences,
+  updatedAt: Date,
+): Record<string, unknown> {
+  const digestMode = (cat: Category): string =>
+    e.digest.enabled && e.digest.categories.includes(cat)
+      ? e.digest.frequency.toLowerCase()
+      : 'immediate';
+  return {
+    user_id: userId,
+    global_preferences: {
+      quiet_hours: { start: e.quietHours.start, end: e.quietHours.end, timezone: e.timezone },
+      language: e.locale,
+      digest_mode: e.digest.enabled ? e.digest.frequency.toLowerCase() : 'none',
+    },
+    category_preferences: CATEGORIES.map((cat) => {
+      const pref = e.categories[cat];
+      return {
+        category: categoryPrefix(c, cat),
+        channels: Object.fromEntries(
+          CHANNELS.map((ch) => [
+            pdfChannel(ch),
+            pref.enabled && e.channels[ch] && (pref.channels ?? CHANNELS).includes(ch),
+          ]),
+        ),
+        digest_mode: digestMode(cat),
+      };
+    }),
+    regulatory_overrides: c.taxonomy
+      .list()
+      .filter((d) => d.mandatoryChannels.length > 0)
+      .map((d) => ({
+        event_type: d.code,
+        channels: d.mandatoryChannels.map(pdfChannel),
+        cannot_disable: true,
+      })),
+    updated_at: new Date(updatedAt).toISOString(),
+  };
+}
+
 export function registerUserRoutes(api: Api, c: Container): void {
   const prefsResponse = async (userId: string): Promise<Record<string, unknown>> => {
     const user = await c.users().require(userId);
-    const { version, preferences } = await c.users().getPreferences(userId);
+    const { version, preferences, updatedAt } = await c.users().getPreferences(userId);
+    const effective = resolvePreferences(c.policy, user.segment, preferences, {
+      timezone: user.timezone,
+      locale: user.locale,
+    });
     const suggestion = (await c
       .db()('digest_suggestions')
       .where({ user_id: userId })
       .whereNull('dismissed_at')
       .first()) as
-      | { cap_hits: number; suggested_frequency: string; suggested_at: Date }
+      | { notifications_in_window: number; suggested_frequency: string; suggested_at: Date }
       | undefined;
     return {
       userId,
       version,
       explicit: preferences,
-      effective: resolvePreferences(c.policy, user.segment, preferences, {
-        timezone: user.timezone,
-        locale: user.locale,
-      }),
+      effective,
       digestSuggestion: suggestion
         ? {
-            capHits: suggestion.cap_hits,
+            notificationsInWindow: suggestion.notifications_in_window,
             suggestedFrequency: suggestion.suggested_frequency,
             suggestedAt: new Date(suggestion.suggested_at).toISOString(),
           }
@@ -131,6 +233,7 @@ export function registerUserRoutes(api: Api, c: Container): void {
         'USER (explicit preferences)',
         'REGULATORY (per-event mandatory channels, applied at routing)',
       ],
+      ...pdfPreferences(c, userId, effective, updatedAt),
     };
   };
 
@@ -338,6 +441,120 @@ export function registerUserRoutes(api: Api, c: Container): void {
         status: 200,
         body: await prefsResponse(params.userId),
         headers: { etag: String((await c.users().getPreferences(params.userId)).version) },
+      };
+    },
+  });
+
+  api.route({
+    method: 'put',
+    path: '/users/:userId/preferences',
+    operationId: 'updateCategoryPreferencesPdf',
+    summary: 'Update one category (PDF Appendix A shape): channels and digest mode',
+    description:
+      'Mandatory (regulatory) channels cannot be disabled; the response lists warnings for the events the change affects. Rate limited to 10 requests/minute per principal.',
+    tags: ['Preferences'],
+    auth: 'authenticated',
+    rateLimit: 'preferences',
+    params: UserIdParam,
+    body: PdfPreferenceUpdate,
+    responses: {
+      200: {
+        description: 'Updated',
+        schema: z.object({
+          status: z.literal('updated'),
+          category: z.string(),
+          warnings: z.array(z.string()),
+          cache_invalidated: z.boolean(),
+          updated_at: z.string(),
+        }),
+      },
+    },
+    handler: async ({ params, body, actor }) => {
+      assertUserAccess(actor, params.userId, 'preferences:write:any');
+      const category = CATEGORIES.find((cat) => categoryPrefix(c, cat) === body.category);
+      if (!category)
+        throw new ValidationError('Unknown category', [
+          { path: 'body.category', message: 'must be one of TXNX, RISK, SIPX, MKTX, REGX' },
+        ]);
+      await c.users().require(params.userId);
+      const res = await c.users().updatePreferences(
+        params.userId,
+        (p) => {
+          const current = p.categories?.[category]?.channels ?? null;
+          const base = current ?? [...CHANNELS];
+          const channels = CHANNELS.filter(
+            (ch) => body.channels[pdfChannel(ch)] ?? base.includes(ch),
+          );
+          const next: UserPreferences = {
+            ...p,
+            categories: { ...p.categories, [category]: { ...p.categories?.[category], channels } },
+          };
+          if (body.digest_mode) {
+            const d = p.digest ?? c.policy.defaults.digest;
+            const cats = d.categories.filter((x) => x !== category);
+            next.digest =
+              body.digest_mode === 'immediate'
+                ? { ...d, categories: cats }
+                : {
+                    ...d,
+                    enabled: true,
+                    frequency: body.digest_mode === 'hourly' ? 'HOURLY' : 'DAILY',
+                    categories: [...cats, category],
+                  };
+          }
+          return next;
+        },
+        actor.id,
+      );
+      const disabled = CHANNELS.filter((ch) => body.channels[pdfChannel(ch)] === false);
+      const defs = c.taxonomy.list().filter((d) => d.category === category);
+      const warnings = disabled.flatMap((ch) => {
+        const affected = defs.filter((d) => d.defaultChannels.includes(ch));
+        const label = {
+          sms: 'SMS',
+          email: 'Email',
+          push: 'Push',
+          whatsapp: 'WhatsApp',
+          inapp: 'In-app',
+        }[ch];
+        if (affected.length === 0) return [];
+        const mandatory = affected.filter((d) => d.mandatoryChannels.includes(ch));
+        return [
+          `${label} disabled for ${body.category} — you will not receive ${
+            affected
+              .filter((d) => !mandatory.includes(d))
+              .map((d) => `${d.name} (${d.code})`)
+              .join(', ') || 'non-mandatory notifications'
+          } via ${pdfChannel(ch)}.` +
+            (mandatory.length > 0
+              ? ` Regulatory notifications (${mandatory.map((d) => d.code).join(', ')}) will still be delivered via mandatory channels.`
+              : ''),
+        ];
+      });
+      await c.audit().record({
+        actorId: actor.id,
+        actorRole: actor.roles.join(','),
+        action: 'PREFERENCES_UPDATECATEGORYPREFERENCESPDF',
+        targetType: 'user',
+        targetId: params.userId,
+        metadata: { version: res.version, category: body.category, disabled },
+      });
+      if (disabled.length > 0)
+        await c
+          .db()('opt_out_events')
+          .insert(
+            disabled.map((ch) => ({ user_id: params.userId, channel: ch, source: 'PREFERENCE' })),
+          );
+      return {
+        status: 200,
+        body: {
+          status: 'updated',
+          category: body.category,
+          warnings,
+          cache_invalidated: res.cacheInvalidated,
+          updated_at: res.updatedAt.toISOString(),
+        },
+        headers: { etag: String(res.version) },
       };
     },
   });

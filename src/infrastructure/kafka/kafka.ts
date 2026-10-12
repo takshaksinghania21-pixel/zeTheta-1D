@@ -11,16 +11,22 @@ import type { AppConfig } from '../../config/env';
 import type { Logger } from '../../common/logger';
 
 export interface TopicNames {
-  financialEvents: string;
+  /** Non-critical financial events, keyed (partitioned) by user id. */
+  events: string;
+  /** CRITICAL events on their own topic + consumer group (no priority inversion). */
+  critical: string;
   lifecycle: string;
-  eventsDlq: string;
+  /** Poison / non-retryable events. */
+  dlq: string;
 }
 
+/** Topic names from PDF Day 3 / Appendix B. */
 export function topicNames(prefix: string): TopicNames {
   return {
-    financialEvents: `${prefix}financial-events.v1`,
-    lifecycle: `${prefix}notification-lifecycle.v1`,
-    eventsDlq: `${prefix}financial-events.dlq.v1`,
+    events: `${prefix}notification-events`,
+    critical: `${prefix}notification-critical`,
+    lifecycle: `${prefix}notification-lifecycle`,
+    dlq: `${prefix}notification-dlq`,
   };
 }
 
@@ -63,7 +69,12 @@ export async function ensureTopics(
   const existing = new Set(await admin.listTopics());
   const wanted = [
     {
-      topic: names.financialEvents,
+      topic: names.events,
+      numPartitions: cfg.partitions,
+      configEntries: [{ name: 'retention.ms', value: String(7 * 86400000) }],
+    },
+    {
+      topic: names.critical,
       numPartitions: cfg.partitions,
       configEntries: [{ name: 'retention.ms', value: String(7 * 86400000) }],
     },
@@ -73,7 +84,7 @@ export async function ensureTopics(
       configEntries: [{ name: 'retention.ms', value: String(3 * 86400000) }],
     },
     {
-      topic: names.eventsDlq,
+      topic: names.dlq,
       numPartitions: 1,
       configEntries: [{ name: 'retention.ms', value: String(30 * 86400000) }],
     },
@@ -102,9 +113,10 @@ export interface ConsumerOptions {
 }
 
 /**
- * Runs a consumer that commits offsets only after the handler resolves
- * (at-least-once). Handler errors propagate so kafkajs re-delivers from the
- * last committed offset; handlers must therefore be idempotent.
+ * Runs a consumer with manual offset management: the offset is committed only
+ * after the handler resolves (at-least-once). Handler errors propagate so
+ * kafkajs re-delivers from the last committed offset; handlers must therefore
+ * be idempotent.
  */
 export async function runConsumer(
   kafka: Kafka,
@@ -125,10 +137,18 @@ export async function runConsumer(
     logger.error({ error: e.payload.error, groupId: opts.groupId }, 'kafka consumer crashed');
   });
   await consumer.run({
-    autoCommit: true,
-    autoCommitInterval: 1000,
+    autoCommit: false,
     partitionsConsumedConcurrently: opts.concurrency,
-    eachMessage: handler,
+    eachMessage: async (payload) => {
+      await handler(payload);
+      await consumer.commitOffsets([
+        {
+          topic: payload.topic,
+          partition: payload.partition,
+          offset: (BigInt(payload.message.offset) + 1n).toString(),
+        },
+      ]);
+    },
   });
   return consumer;
 }
@@ -143,8 +163,12 @@ export function headerString(
   return first === undefined ? undefined : Buffer.isBuffer(first) ? first.toString('utf8') : first;
 }
 
-/** Total lag for a consumer group across partitions of a topic. */
-export async function consumerLag(admin: Admin, groupId: string, topic: string): Promise<number> {
+/** Consumer-group lag per partition of a topic, and the total. */
+export async function consumerLag(
+  admin: Admin,
+  groupId: string,
+  topic: string,
+): Promise<{ total: number; partitions: { partition: number; lag: number }[] }> {
   const [latest, committed] = await Promise.all([
     admin.fetchTopicOffsets(topic),
     admin.fetchOffsets({ groupId, topics: [topic] }),
@@ -152,11 +176,10 @@ export async function consumerLag(admin: Admin, groupId: string, topic: string):
   const committedMap = new Map(
     (committed[0]?.partitions ?? []).map((p) => [p.partition, Number(p.offset)]),
   );
-  let lag = 0;
-  for (const p of latest) {
+  const partitions = latest.map((p) => {
     const high = Number(p.high);
     const c = committedMap.get(p.partition) ?? -1;
-    lag += c < 0 ? high - Number(p.low) : Math.max(0, high - c);
-  }
-  return lag;
+    return { partition: p.partition, lag: c < 0 ? high - Number(p.low) : Math.max(0, high - c) };
+  });
+  return { total: partitions.reduce((sum, p) => sum + p.lag, 0), partitions };
 }

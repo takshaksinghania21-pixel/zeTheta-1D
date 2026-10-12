@@ -17,8 +17,27 @@ export interface DeadLetterRow {
   resolved_by: string | null;
   resolved_at: Date | null;
   resolution_note: string | null;
+  classification: DlqClassification | null;
   created_at: Date;
   updated_at: Date;
+}
+
+export type DlqClassification = 'TRANSIENT' | 'PERMANENT' | 'CONFIGURATION';
+
+/**
+ * Automated DLQ classification (PDF Day 9): transient (retry later), permanent
+ * (bad data: fix or discard) or configuration (credentials/templates: fix setup, then retry).
+ */
+export function classifyFailure(
+  reasonCode: string,
+  retryHistory: unknown[] = [],
+): DlqClassification {
+  if (reasonCode === 'TEMPLATE_ERROR' || /AUTH|CONFIG/.test(reasonCode)) return 'CONFIGURATION';
+  if (reasonCode === 'RETRIES_EXHAUSTED')
+    return retryHistory.some((a) => (a as { error_kind?: string }).error_kind === 'AUTH')
+      ? 'CONFIGURATION'
+      : 'TRANSIENT';
+  return 'PERMANENT';
 }
 
 export class DeadLetterRepository {
@@ -50,6 +69,7 @@ export class DeadLetterRepository {
         attempts: entry.attempts,
         retry_history: JSON.stringify(entry.retryHistory ?? []),
         payload: JSON.stringify(entry.payload ?? {}),
+        classification: classifyFailure(entry.reasonCode, entry.retryHistory),
       })
       .onConflict()
       .ignore()
@@ -68,6 +88,8 @@ export class DeadLetterRepository {
     status?: string;
     source?: string;
     channel?: string;
+    reason?: string;
+    classification?: string;
     limit: number;
     offset: number;
   }): Promise<{ items: DeadLetterRow[]; total: number }> {
@@ -75,6 +97,8 @@ export class DeadLetterRepository {
     if (filter.status) base.where('status', filter.status);
     if (filter.source) base.where('source', filter.source);
     if (filter.channel) base.where('channel', filter.channel);
+    if (filter.reason) base.where('reason_code', filter.reason);
+    if (filter.classification) base.where('classification', filter.classification);
     const [{ count } = { count: '0' }] = (await base.clone().count('* as count')) as {
       count: string;
     }[];

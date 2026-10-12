@@ -23,10 +23,11 @@ export class UserContextService {
     private readonly policy: NotificationPolicy,
   ) {}
 
-  async load(userId: string): Promise<UserContext> {
+  /** `fresh` reads preferences from PostgreSQL, bypassing the cache (dispatch re-checks). */
+  async load(userId: string, options: { fresh?: boolean } = {}): Promise<UserContext> {
     const [user, prefs, contacts, consents] = await Promise.all([
       this.users.get(userId),
-      this.users.getPreferences(userId),
+      this.users.getPreferences(userId, options),
       this.users.contactSummaries(userId),
       this.consents.states(userId),
     ]);

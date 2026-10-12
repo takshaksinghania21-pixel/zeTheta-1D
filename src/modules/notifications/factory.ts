@@ -125,7 +125,9 @@ export class NotificationFactory {
 
   async enqueueDelivery(
     trx: Knex | Knex.Transaction,
-    row: NotificationRow,
+    row: Pick<NotificationRow, 'id' | 'channel' | 'priority' | 'correlation_id'> & {
+      created_at: Date | string;
+    },
     retry: number,
   ): Promise<void> {
     const msg: DeliveryMessage = {

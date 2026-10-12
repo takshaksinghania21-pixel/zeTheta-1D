@@ -7,6 +7,7 @@ import { metrics } from '../common/metrics';
 import { sanitizeForLog } from '../common/pii';
 import { CHANNELS, type Channel } from '../domain/types';
 import { consumerLag, headerString, runConsumer } from '../infrastructure/kafka/kafka';
+import { enqueueOutbox } from '../infrastructure/outbox/outbox';
 import { consumeQueue, queueDepths } from '../infrastructure/rabbitmq/rabbitmq';
 import { kafkaEventSchema } from '../modules/events/ingestion';
 import type { LifecycleEvent } from '../modules/notifications/types';
@@ -25,17 +26,58 @@ const deliveryMessageSchema = z.strictObject({
 
 export const consumerGroups = (prefix: string) => ({
   events: `${prefix}notification-engine.event-consumer`,
+  critical: `${prefix}notification-engine.critical-consumer`,
   analytics: `${prefix}notification-engine.analytics`,
 });
 
-/** Kafka financial-events consumer → EventProcessor. */
-export async function startEventConsumer(c: Container): Promise<RunningWorker> {
-  const log = c.logger.child({ component: 'event-consumer' });
+/** Records an unprocessable event in the DLQ table and on the notification-dlq topic. */
+async function deadLetterEvent(
+  c: Container,
+  entry: Parameters<ReturnType<Container['dlqRepo']>['insert']>[1],
+  key: string,
+  correlationId: string,
+): Promise<void> {
+  await c.db().transaction(async (trx) => {
+    await c.dlqRepo().insert(trx, entry);
+    await enqueueOutbox(trx, [
+      {
+        destination: 'KAFKA',
+        topic: c.topics.dlq,
+        key,
+        payload: {
+          source: entry.source,
+          reasonCode: entry.reasonCode,
+          reasonMessage: entry.reasonMessage,
+          payload: entry.payload,
+        },
+        headers: { 'x-correlation-id': correlationId },
+      },
+    ]);
+  });
+}
+
+/** Kafka notification-events consumer → EventProcessor. */
+export function startEventConsumer(c: Container): Promise<RunningWorker> {
+  return startTopicConsumer(c, 'event-consumer', c.topics.events, 'events');
+}
+
+/** Dedicated consumer group for notification-critical (PDF §C4.3, Appendix B). */
+export function startCriticalEventConsumer(c: Container): Promise<RunningWorker> {
+  return startTopicConsumer(c, 'critical-consumer', c.topics.critical, 'critical');
+}
+
+async function startTopicConsumer(
+  c: Container,
+  name: string,
+  topic: string,
+  group: 'events' | 'critical',
+): Promise<RunningWorker> {
+  const log = c.logger.child({ component: name });
   const consumer: Consumer = await runConsumer(
     c.kafka(),
     {
-      groupId: consumerGroups(c.config.KAFKA_TOPIC_PREFIX).events,
-      topic: c.topics.financialEvents,
+      groupId: consumerGroups(c.config.KAFKA_TOPIC_PREFIX)[group],
+      topic,
       concurrency: c.config.KAFKA_CONSUMER_CONCURRENCY,
     },
     async ({ message, partition }) => {
@@ -48,17 +90,19 @@ export async function startEventConsumer(c: Container): Promise<RunningWorker> {
           parsed = kafkaEventSchema.parse(JSON.parse(message.value?.toString('utf8') ?? 'null'));
         } catch (err) {
           // Poison message: park it and move on (offset advances).
-          await c.dlqRepo().insert(c.db(), {
-            source: 'POISON',
-            reasonCode: 'INVALID_KAFKA_MESSAGE',
-            reasonMessage: err instanceof Error ? err.message : 'unparseable',
-            attempts: 1,
-            payload: { topic: c.topics.financialEvents, partition, offset: message.offset },
-          });
-          log.error(
-            { partition, offset: message.offset },
-            'poison message on financial-events topic',
+          await deadLetterEvent(
+            c,
+            {
+              source: 'POISON',
+              reasonCode: 'INVALID_KAFKA_MESSAGE',
+              reasonMessage: err instanceof Error ? err.message : 'unparseable',
+              attempts: 1,
+              payload: { topic, partition, offset: message.offset },
+            },
+            `${topic}:${partition}:${message.offset}`,
+            correlationId,
           );
+          log.error({ topic, partition, offset: message.offset }, 'poison message on event topic');
           return;
         }
         try {
@@ -67,14 +111,19 @@ export async function startEventConsumer(c: Container): Promise<RunningWorker> {
           (await c.outboxRelay()).kick();
         } catch (err) {
           if (err instanceof NonRetryableError) {
-            await c.dlqRepo().insert(c.db(), {
-              source: 'EVENT',
-              eventId: null,
-              reasonCode: err.reasonCode,
-              reasonMessage: err.message,
-              attempts: 1,
-              payload: { eventId: parsed.eventId },
-            });
+            await deadLetterEvent(
+              c,
+              {
+                source: 'EVENT',
+                eventId: null,
+                reasonCode: err.reasonCode,
+                reasonMessage: err.message,
+                attempts: 1,
+                payload: { eventId: parsed.eventId },
+              },
+              parsed.eventId,
+              correlationId,
+            );
             log.error(
               { eventId: parsed.eventId, reason: err.reasonCode },
               'non-retryable event failure',
@@ -91,7 +140,7 @@ export async function startEventConsumer(c: Container): Promise<RunningWorker> {
     },
     log,
   );
-  return { name: 'event-consumer', stop: () => consumer.disconnect() };
+  return { name, stop: () => consumer.disconnect() };
 }
 
 /** RabbitMQ delivery queue consumers → DeliveryDispatcher. */
@@ -162,11 +211,14 @@ export async function startDlqIngest(c: Container): Promise<RunningWorker> {
       } catch {
         body = { raw: msg.content.toString('utf8').slice(0, 500) };
       }
+      // Only a well-formed id may be stored: a poison body can carry anything, and a
+      // failed insert here would requeue the message forever.
       const notificationId =
         typeof body === 'object' &&
         body !== null &&
         'notificationId' in body &&
-        typeof body.notificationId === 'string'
+        typeof body.notificationId === 'string' &&
+        z.uuid().safeParse(body.notificationId).success
           ? body.notificationId
           : null;
       await c.dlqRepo().insert(c.db(), {
@@ -239,6 +291,16 @@ export function startScheduler(c: Container): RunningWorker {
       },
       onError,
     ),
+    loop(
+      'scheduler.retries',
+      c.config.SCHEDULER_POLL_MS,
+      // One bounded batch per tick: the retry-storm guard after a provider outage.
+      async () => {
+        if ((await c.retryScheduler().releaseDue(c.clock.now())) > 0)
+          (await c.outboxRelay()).kick();
+      },
+      onError,
+    ),
     loop('scheduler.sweep', 60000, () => s.sweep(), onError),
     loop('scheduler.partitions', 6 * 3600000, () => s.maintainPartitions(), onError),
     loop('scheduler.retention', 24 * 3600000, () => s.runRetention(), onError),
@@ -284,15 +346,20 @@ export async function startAnalytics(c: Container): Promise<RunningWorker> {
     'analytics.gauges',
     15000,
     async () => {
-      metrics.consumerLag.set(
-        { group: groups.events, topic: c.topics.financialEvents },
-        await consumerLag(admin, groups.events, c.topics.financialEvents),
-      );
-      metrics.consumerLag.set(
-        { group: groups.analytics, topic: c.topics.lifecycle },
-        await consumerLag(admin, groups.analytics, c.topics.lifecycle),
-      );
+      for (const [group, topic] of [
+        [groups.events, c.topics.events],
+        [groups.critical, c.topics.critical],
+        [groups.analytics, c.topics.lifecycle],
+      ] as const) {
+        const lag = await consumerLag(admin, group, topic);
+        for (const p of lag.partitions)
+          metrics.consumerLag.set(
+            { topic, partition: String(p.partition), consumer_group: group },
+            p.lag,
+          );
+      }
       await c.dlqRepo().openCount();
+      metrics.dndViolations.set(await c.decisions().dndViolations(c.clock.now()));
       await (await c.outboxRelay()).backlog();
       const depths = await queueDepths(c.rabbit(), [
         ...CHANNELS.map((ch) => c.topology.deliveryQueue(ch)),

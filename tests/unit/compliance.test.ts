@@ -214,3 +214,14 @@ describe('DND lookup and evaluation', () => {
     expect(evaluateDnd(null, 'PROMOTIONAL', 'push', policy.dnd).rule).toBe('DND_NOT_APPLICABLE');
   });
 });
+
+describe('DLQ classification (PDF Day 9)', () => {
+  it('classifies failures as transient, permanent or configuration', async () => {
+    const { classifyFailure } = await import('../../src/modules/dlq/repository');
+    expect(classifyFailure('RETRIES_EXHAUSTED', [{ error_kind: 'TIMEOUT' }])).toBe('TRANSIENT');
+    expect(classifyFailure('RETRIES_EXHAUSTED', [{ error_kind: 'AUTH' }])).toBe('CONFIGURATION');
+    expect(classifyFailure('TEMPLATE_ERROR')).toBe('CONFIGURATION');
+    expect(classifyFailure('POISON_MESSAGE')).toBe('PERMANENT');
+    expect(classifyFailure('SCHEMA_INVALID')).toBe('PERMANENT');
+  });
+});

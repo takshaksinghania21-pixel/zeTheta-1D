@@ -10,5 +10,6 @@ reports
 !.env.example
 *.log
 tests
-load-tests
+tests/load
 docs
+data

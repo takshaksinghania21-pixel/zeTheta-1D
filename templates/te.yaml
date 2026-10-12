@@ -24,8 +24,8 @@ templates:
     long: "నమస్తే {{user.name}},\n\n{{date depositedAt format='datetime'}}న {{mode}} ద్వారా {{currency amount}} అందింది. రిఫరెన్స్: {{referenceId}}.{{#if availableBalance}}\n\nమీ అందుబాటులో ఉన్న బ్యాలెన్స్ ఇప్పుడు {{currency availableBalance}}.{{/if}}"
   RISK-001:
     title: 'అత్యవసరం: మార్జిన్ కాల్'
-    short: "అత్యవసర మార్జిన్ కాల్: అవసరం {{currency marginRequired}}, అందుబాటులో {{currency marginAvailable}}. {{date deadline format='datetime'}} లోగా నిధులు జోడించండి. -Zetheta"
-    long: "నమస్తే {{user.name}},\n\nమీ ఖాతాకు మార్జిన్ కాల్ వచ్చింది.\n\nఅవసరమైన మార్జిన్: {{currency marginRequired}}\nఅందుబాటులో ఉన్న మార్జిన్: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% వినియోగం)\n\n{{date deadline format='datetime'}} లోపు నిధులు జోడించండి లేదా పొజిషన్లను తగ్గించండి; లేకపోతే ముందస్తు సమాచారం లేకుండా పొజిషన్లు స్క్వేర్-ఆఫ్ చేయబడవచ్చు."
+    short: "అత్యవసర మార్జిన్ కాల్: అవసరం {{currency requiredMargin}}, అందుబాటులో {{currency currentMargin}}. {{date deadline format='datetime'}} లోగా నిధులు జోడించండి. -Zetheta"
+    long: "నమస్తే {{user.name}},\n\nమీ ఖాతాకు మార్జిన్ కాల్ వచ్చింది.\n\nమీ ఖాతాలో {{currency shortfallAmount}} మార్జిన్ కొరత ఉంది.\n\nఅవసరమైన మార్జిన్: {{currency requiredMargin}}\nఅందుబాటులో ఉన్న మార్జిన్: {{currency currentMargin}}\n\n{{date deadline format='datetime'}} లోపు నిధులు జోడించండి లేదా పొజిషన్లను తగ్గించండి; లేకపోతే ముందస్తు సమాచారం లేకుండా పొజిషన్లు స్క్వేర్-ఆఫ్ చేయబడవచ్చు."
   RISK-002:
     title: 'అత్యవసరం: మార్జిన్ కొరత {{currency shortfallAmount}}'
     short: "అత్యవసరం: {{currency shortfallAmount}} మార్జిన్ కొరత. {{date deadline format='datetime'}} లోగా నిధులు జోడించండి. -Zetheta"

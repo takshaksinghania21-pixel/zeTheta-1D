@@ -122,6 +122,11 @@ export class NotificationLifecycle {
       },
     ]);
     metrics.transitions.inc({ to_state: to, channel: row.channel });
+    if (to === 'DELIVERED')
+      metrics.deliveryLatency.observe(
+        { channel: row.channel, priority: row.priority },
+        (at.getTime() - new Date(row.created_at).getTime()) / 1000,
+      );
   }
 
   private event(

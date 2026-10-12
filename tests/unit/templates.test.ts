@@ -10,7 +10,7 @@ import { CHANNELS, LOCALES, type Channel, type Locale } from '../../src/domain/t
 
 const taxonomy = EventTaxonomy.load();
 const store = new FileTemplateStore();
-const engine = new TemplateEngine(store, { fallbackLocale: 'en', smsMaxSegments: 4 });
+const engine = new TemplateEngine(store, { fallbackLocale: 'en', smsMaxChars: 160 });
 const base = { timezone: 'Asia/Kolkata', user: { name: 'Asha' } };
 
 function payload(code: string): Record<string, unknown> {
@@ -75,7 +75,7 @@ describe('template rendering', () => {
       locale: 'en',
       data: payload('RISK-001'),
     });
-    expect(sms.body).toContain('Rs.1,25,000.00');
+    expect(sms.body).toContain('Rs.5,00,000.00'); // Indian digit grouping (₹1,00,000 style)
     expect(sms.sms?.encoding).toBe('GSM-7');
     const push = await engine.render({
       ...base,
@@ -84,7 +84,7 @@ describe('template rendering', () => {
       locale: 'en',
       data: payload('RISK-001'),
     });
-    expect(push.body).toContain('₹1,25,000.00');
+    expect(push.body).toContain('₹5,00,000.00');
     expect(push.title).toBe('URGENT: Margin call');
   });
 
@@ -134,7 +134,7 @@ describe('template rendering', () => {
   it('falls back to English for an unsupported locale template', async () => {
     const sparse = new TemplateEngine(
       { getActive: (e, c, l) => (l === 'en' ? store.getActive(e, c, l) : Promise.resolve(null)) },
-      { fallbackLocale: 'en', smsMaxSegments: 4 },
+      { fallbackLocale: 'en', smsMaxChars: 160 },
     );
     const out = await sparse.render({
       ...base,
@@ -248,14 +248,15 @@ describe('template rendering', () => {
     expect(Array.from(out.body).length).toBe(240);
   });
 
-  it('truncates SMS bodies beyond the segment budget', () => {
+  it('truncates SMS bodies to 160 characters (one GSM-7 segment)', () => {
     const out = engine.renderTemplate(
       { version: 1, body: 'A'.repeat(1000) },
       { ...base, eventType: 'X', channel: 'sms', locale: 'en', data: {} },
       'en',
     );
     expect(out.sms?.truncated).toBe(true);
-    expect(out.sms?.segments).toBe(4);
+    expect(out.sms?.segments).toBe(1);
+    expect(out.body).toHaveLength(160);
   });
 });
 

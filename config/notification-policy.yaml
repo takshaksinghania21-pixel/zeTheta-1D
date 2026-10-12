@@ -30,7 +30,7 @@ frequencyCaps:
   # Exempt events are counted (they consume budget) but are never blocked [DEFAULT]
   countExemptEvents: true
   # Weekly digest suggestion: cap hits within 7 days that trigger a suggestion [DEFAULT]
-  digestSuggestion: { capHitThreshold: 5, windowSeconds: 604800 }
+  digestSuggestion: { dailyThreshold: 8, windowSeconds: 604800 } # [ASSIGNMENT] > 8/day, rolling 7 days
 
 quietHours:
   default: { enabled: true, start: '21:00', end: '08:00' } # [ASSIGNMENT]
@@ -67,11 +67,12 @@ costs:
 templates:
   supportedLocales: [en, hi, mr, ta, te]
   fallbackLocale: en
-  smsMaxSegments: 4
+  smsMaxChars: 160 # [ASSIGNMENT] §A4.3: SMS body must fit 160 chars (truncate with ellipsis + link)
 
-circuitBreaker:
+circuitBreaker: # [ASSIGNMENT] Appendix B: 5 failures in 60 s → OPEN for 60 s, one trial
   failureThreshold: 5
-  openDurationMs: 30000
+  failureWindowMs: 60000
+  openDurationMs: 60000
   halfOpenMaxTrials: 1
 
 dnd:

@@ -97,7 +97,12 @@ describe('RedisRateLimiter (sliding window)', () => {
 });
 
 describe('RedisCircuitStore matches the reference reducer', () => {
-  const cfg = { failureThreshold: 3, openDurationMs: 1000, halfOpenMaxTrials: 1 };
+  const cfg = {
+    failureThreshold: 3,
+    failureWindowMs: 800,
+    openDurationMs: 1000,
+    halfOpenMaxTrials: 1,
+  };
   it('follows the same transitions as the in-memory model for a scripted sequence', async () => {
     let now = 10_000;
     const redisCb = new CircuitBreaker(
@@ -124,6 +129,13 @@ describe('RedisCircuitStore matches the reference reducer', () => {
       ['acquire'],
       ['ok'],
       ['acquire'],
+      ['fail'],
+      ['ok'],
+      ['fail'],
+      ['tick', 900],
+      ['fail'],
+      ['fail'],
+      ['fail'],
     ];
     const trace = async (cb: CircuitBreaker) => {
       const out: string[] = [];

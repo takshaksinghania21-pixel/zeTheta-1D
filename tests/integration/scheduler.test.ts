@@ -123,6 +123,13 @@ describe('quiet hours scheduling (durable, restart-safe)', () => {
     );
     expect(states.filter((s) => s === 'QUEUED')).toHaveLength(3); // category cap: 3 per hour
     expect(states.filter((s) => s === 'CAPPED')).toHaveLength(1);
+    // MKTX-001 defers push + SMS: both channels of one event count once against the caps.
+    const sms = await Promise.all(
+      ids.map(
+        async (id) => (await c.notifications().byEvent(id)).find((n) => n.channel === 'sms')!.state,
+      ),
+    );
+    expect(sms).toEqual(states);
   });
 
   it('survives a scheduler crash: stuck PROCESSING jobs are reclaimed', async () => {
@@ -192,6 +199,15 @@ describe('preference digests and suggestions', () => {
       }),
       't',
     );
+    // MKTX-003 is PROMOTIONAL (Engagement): push needs explicit opt-in.
+    await c.consents().record({
+      userId,
+      channel: 'push',
+      purpose: 'PROMOTIONAL',
+      status: 'GRANTED',
+      source: 'APP',
+      recordedBy: 't',
+    });
     clock.set('2026-01-15T09:00:00Z');
     await process(userId, 'MKTX-003', SAMPLE_PAYLOADS['MKTX-003']!);
     await process(userId, 'MKTX-003', { ...SAMPLE_PAYLOADS['MKTX-003'], session: 'OPEN' });
@@ -208,13 +224,20 @@ describe('preference digests and suggestions', () => {
     expect(digest).toMatchObject({ channel: 'email', state: 'QUEUED' });
   });
 
-  it('suggests a weekly digest after repeated cap hits', async () => {
+  it('suggests a digest when the user averages more than 8 notifications/day over 7 days', async () => {
     const userId = await createUser(c);
-    clock.set('2026-01-15T09:00:00Z');
-    for (let i = 0; i < 9; i++)
-      await process(userId, 'MKTX-002', { ...SAMPLE_PAYLOADS['MKTX-002'], symbol: `X${i}` });
+    const notify = async (day: number, i: number) => {
+      clock.set(new Date(Date.UTC(2026, 0, 10 + day, 6, i)).toISOString());
+      await process(userId, 'TXNX-003', {
+        ...SAMPLE_PAYLOADS['TXNX-003'],
+        orderId: `D${day}-${i}`,
+      });
+    };
+    for (let day = 0; day < 7; day++) for (let i = 0; i < 8; i++) await notify(day, i); // exactly 8/day
+    expect(await c.db()('digest_suggestions').where({ user_id: userId }).first()).toBeUndefined();
+    await notify(6, 30); // 57 in 7 days → average above 8/day
     const s = await c.db()('digest_suggestions').where({ user_id: userId }).first();
-    expect(s).toMatchObject({ cap_hits: 6, suggested_frequency: 'WEEKLY' });
+    expect(s).toMatchObject({ notifications_in_window: 57, suggested_frequency: 'WEEKLY' });
   });
 });
 
@@ -226,12 +249,13 @@ describe('restart recovery sweeper', () => {
     await c.db()('outbox').del();
     clock.set('2026-01-15T10:00:00Z');
     const r = await c.scheduler().sweep();
-    expect(r.notifications).toBe(3);
+    expect(r.notifications).toBe(4);
     const outbox = await c.db()('outbox').where({ destination: 'RABBITMQ' });
     expect(outbox.map((o: { routing_key: string }) => o.routing_key).sort()).toEqual([
       'email',
       'inapp',
       'push',
+      'sms',
     ]);
     expect((await c.notifications().byEvent(eventId)).every((n) => n.state === 'QUEUED')).toBe(
       true,

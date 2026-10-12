@@ -2,20 +2,26 @@ export type CircuitStatus = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 export interface CircuitState {
   status: CircuitStatus;
-  consecutiveFailures: number;
+  /** Failures counted in the current window (CLOSED) or since opening. */
+  failures: number;
+  /** Start of the current failure-counting window (CLOSED only). */
+  windowStartedAt: number | null;
   openedAt: number | null;
   halfOpenInFlight: number;
 }
 
 export interface CircuitConfig {
+  /** Opens after this many failures within failureWindowMs (PDF: 5 in 60 s). */
   failureThreshold: number;
+  failureWindowMs: number;
   openDurationMs: number;
   halfOpenMaxTrials: number;
 }
 
 export const INITIAL_CIRCUIT: CircuitState = {
   status: 'CLOSED',
-  consecutiveFailures: 0,
+  failures: 0,
+  windowStartedAt: null,
   openedAt: null,
   halfOpenInFlight: 0,
 };
@@ -48,22 +54,24 @@ export function circuitAcquire(
   return { allowed: false, next: s };
 }
 
-export function circuitOnSuccess(_s: CircuitState): CircuitState {
-  return { ...INITIAL_CIRCUIT };
+/** A successful trial closes the circuit; successes while CLOSED keep the failure window. */
+export function circuitOnSuccess(s: CircuitState): CircuitState {
+  return s.status === 'CLOSED' ? s : { ...INITIAL_CIRCUIT };
 }
 
 export function circuitOnFailure(s: CircuitState, now: number, cfg: CircuitConfig): CircuitState {
-  if (s.status === 'HALF_OPEN')
-    return {
-      status: 'OPEN',
-      consecutiveFailures: s.consecutiveFailures + 1,
-      openedAt: now,
-      halfOpenInFlight: 0,
-    };
-  const failures = s.consecutiveFailures + 1;
-  if (failures >= cfg.failureThreshold)
-    return { status: 'OPEN', consecutiveFailures: failures, openedAt: now, halfOpenInFlight: 0 };
-  return { ...s, consecutiveFailures: failures };
+  const open = (failures: number): CircuitState => ({
+    status: 'OPEN',
+    failures,
+    windowStartedAt: null,
+    openedAt: now,
+    halfOpenInFlight: 0,
+  });
+  if (s.status !== 'CLOSED') return open(s.failures + 1);
+  const fresh = s.windowStartedAt === null || now - s.windowStartedAt >= cfg.failureWindowMs;
+  const failures = fresh ? 1 : s.failures + 1;
+  if (failures >= cfg.failureThreshold) return open(failures);
+  return { ...s, failures, windowStartedAt: fresh ? now : s.windowStartedAt };
 }
 
 /** Whether a new request could currently be attempted (read-only, for routing). */

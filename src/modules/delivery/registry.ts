@@ -276,7 +276,7 @@ export class ProviderRegistry implements ChannelHealth {
         costMicros: row?.cost_micros ?? null,
         circuit: {
           status: state.status,
-          consecutiveFailures: state.consecutiveFailures,
+          failures: state.failures,
           openedAt: state.openedAt ? new Date(state.openedAt).toISOString() : null,
         },
         quota: await p.getQuota(),

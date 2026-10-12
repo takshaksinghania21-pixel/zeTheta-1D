@@ -6,7 +6,9 @@ import type { Principal } from '../../modules/auth/service';
 import type { NotificationRow } from '../../modules/notifications/types';
 import type { Api } from '../http';
 import { camel, toNotificationDto } from '../mappers';
+import { PRIORITY_NUMBER, pdfChannel } from '../pdf-contract';
 import {
+  NotificationDetailSchema,
   CategoryEnum,
   ChannelEnum,
   NotificationSchema,
@@ -113,14 +115,79 @@ export function registerNotificationRoutes(api: Api, c: Container): void {
     tags: ['Notifications'],
     auth: { anyOf: [...readAuth.anyOf] },
     params: UuidParam,
+    description:
+      'Includes the PDF Appendix A fields (p.65–66): `priority` is the §A8 number (1 = CRITICAL … 5 = LOW; the label is in `priorityLabel`), `channel` uses `in_app`, plus `state_history` and the `compliance` evidence (DND check timestamp and result, classification, regulatory override, frequency-cap result).',
     responses: {
-      200: { description: 'Notification', schema: NotificationSchema },
+      200: { description: 'Notification', schema: NotificationDetailSchema },
       404: { description: 'Not found (or not visible)' },
     },
-    handler: async ({ params, actor }) => ({
-      status: 200,
-      body: toNotificationDto(await loadVisible(c, actor, params.id)),
-    }),
+    handler: async ({ params, actor }) => {
+      const n = await loadVisible(c, actor, params.id);
+      const [history, own, eventLevel] = await Promise.all([
+        c.notifications().history(n.id),
+        c.decisions().list({ notificationId: n.id, limit: 100 }),
+        n.event_id ? c.decisions().list({ eventId: n.event_id, limit: 200 }) : [],
+      ]);
+      const decisions = [
+        ...own,
+        ...eventLevel.filter((d) => d.channel === n.channel || d.channel === null),
+      ];
+      const dnd = decisions
+        .filter((d) => String(d.rule).startsWith('DND_'))
+        .sort((a, b) => +new Date(b.created_at as Date) - +new Date(a.created_at as Date))[0];
+      const capped = n.state === 'CAPPED';
+      const capChecked = decisions.some((d) => String(d.rule).startsWith('FREQUENCY_'));
+      const dto = toNotificationDto(n);
+      return {
+        status: 200,
+        body: {
+          ...dto,
+          priority: PRIORITY_NUMBER[n.priority],
+          priorityLabel: n.priority,
+          channel: pdfChannel(n.channel),
+          notification_id: n.id,
+          event_type: n.event_type,
+          user_id: n.user_id,
+          status: n.state,
+          template_id: n.template_version ? `${n.event_type}-v${n.template_version}` : null,
+          external_id: n.provider_message_id,
+          delivery_attempts: n.attempt_count,
+          rendered_content: n.content
+            ? {
+                body: n.content.body,
+                ...(n.content.title ? { title: n.content.title } : {}),
+                ...(n.content.subject ? { subject: n.content.subject } : {}),
+              }
+            : null,
+          state_history: history.map((h) => ({
+            status: h.to_state,
+            timestamp: new Date(h.created_at as Date).toISOString(),
+            actor: h.actor,
+            ...(h.metadata && Object.keys(h.metadata as object).length > 0
+              ? { metadata: h.metadata }
+              : {}),
+          })),
+          compliance: {
+            dnd_checked: dnd !== undefined,
+            dnd_check_timestamp: dnd ? new Date(dnd.created_at as Date).toISOString() : null,
+            dnd_result: dnd
+              ? ((dnd.metadata as { dndStatus?: string } | null)?.dndStatus ??
+                String(dnd.rule).replace('DND_', ''))
+              : null,
+            classification: n.regulatory_class,
+            regulatory_override: n.via_override,
+            frequency_cap_checked: capChecked,
+            frequency_cap_result: capped ? 'CAPPED' : capChecked ? 'WITHIN_LIMITS' : null,
+          },
+          cost_paisa: Math.round(n.cost_micros / 10000), // bigint arrives as a string; `/` coerces
+          created_at: new Date(n.created_at).toISOString(),
+          delivered_at: n.delivered_at ? new Date(n.delivered_at).toISOString() : null,
+          latency_ms: n.delivered_at
+            ? new Date(n.delivered_at).getTime() - new Date(n.created_at).getTime()
+            : null,
+        },
+      };
+    },
   });
 
   api.route({

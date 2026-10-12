@@ -2,7 +2,6 @@ import 'dotenv/config';
 import http from 'node:http';
 import { createApp } from './app';
 import { enableDefaultMetrics } from './common/metrics';
-import { setRootLogger } from './common/logger';
 import { loadConfig } from './config/env';
 import { Container } from './container';
 import { attachSocketIo } from './socket';
@@ -12,7 +11,6 @@ import { ensureInfrastructure } from './workers/bootstrap';
 async function main(): Promise<void> {
   const config = loadConfig();
   const c = new Container(config);
-  setRootLogger(c.logger);
   enableDefaultMetrics(config.SERVICE_NAME);
   await ensureInfrastructure(c);
 
@@ -25,7 +23,15 @@ async function main(): Promise<void> {
     ? await startWorkers(
         c,
         process.env.RUN_WORKERS === 'all'
-          ? ['outbox-relay', 'event-consumer', 'dispatcher', 'dlq-ingest', 'scheduler', 'analytics']
+          ? [
+              'outbox-relay',
+              'event-consumer',
+              'critical-consumer',
+              'dispatcher',
+              'dlq-ingest',
+              'scheduler',
+              'analytics',
+            ]
           : (process.env.RUN_WORKERS.split(',') as never[]),
       )
     : [];

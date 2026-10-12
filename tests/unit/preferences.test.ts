@@ -52,11 +52,11 @@ describe('preference hierarchy', () => {
 
   it('layer 4: regulatory override adds only mandatory channels the user disabled', () => {
     const def = taxonomy.get('RISK-001')!;
-    const prefs = resolvePreferences(policy, 'RETAIL', { channels: { sms: false, push: false } });
+    const prefs = resolvePreferences(policy, 'RETAIL', { channels: { sms: false, inapp: false } });
     const sel = channelsForEvent(def, prefs);
     expect(sel.overridden).toEqual(['sms']);
-    expect(sel.disabledByUser).toEqual(['push']);
-    expect(sel.preferred).toEqual(['email', 'inapp']);
+    expect(sel.disabledByUser).toEqual(['inapp']);
+    expect(sel.preferred).toEqual(['push']);
   });
 
   it('category-level disable removes all channels for non-mandatory events', () => {

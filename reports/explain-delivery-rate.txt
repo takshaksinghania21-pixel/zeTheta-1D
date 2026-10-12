@@ -1,0 +1,145 @@
+# EXPLAIN (ANALYZE, BUFFERS) — generated 2026-10-11T20:51:12.582Z
+# Data volume: {"notifications":"9","analytics_hourly":"15","partitions":"6","pg":"PostgreSQL 16.15 (Homebrew) on aarch64-apple-darwin25.6.0, compiled by Apple clang version 21.0.0 (clang-2100.1.1.101), 64-bit"}
+# Single-machine development database; plans and timings change with volume.
+
+## Daily delivery rate by channel (raw notifications, partition-pruned by created_at)
+SELECT date_trunc('day', created_at) AS day, channel,
+           count(*) FILTER (WHERE sent_at IS NOT NULL)      AS sent,
+           count(*) FILTER (WHERE delivered_at IS NOT NULL) AS delivered,
+           round(count(*) FILTER (WHERE delivered_at IS NOT NULL)::numeric
+                 / NULLIF(count(*) FILTER (WHERE sent_at IS NOT NULL), 0), 4) AS delivery_rate
+    FROM notifications
+    WHERE created_at >= date_trunc('day', now()) - interval '1 day'
+      AND created_at <  date_trunc('day', now()) + interval '1 day'
+    GROUP BY 1, 2 ORDER BY 1, 2
+
+GroupAggregate  (cost=47.53..48.05 rows=14 width=71) (actual time=0.471..0.479 rows=3 loops=1)
+  Group Key: (date_trunc('day'::text, notifications.created_at)), notifications.channel
+  Buffers: shared hit=12
+  ->  Sort  (cost=47.53..47.56 rows=14 width=39) (actual time=0.069..0.070 rows=9 loops=1)
+        Sort Key: (date_trunc('day'::text, notifications.created_at)), notifications.channel
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=12
+        ->  Append  (cost=0.16..47.26 rows=14 width=39) (actual time=0.008..0.026 rows=9 loops=1)
+              Buffers: shared hit=6
+              Subplans Removed: 5
+              ->  Seq Scan on notifications_2026_10 notifications_1  (cost=0.00..6.29 rows=9 width=39) (actual time=0.007..0.024 rows=9 loops=1)
+                    Filter: ((created_at >= (date_trunc('day'::text, now()) - '1 day'::interval)) AND (created_at < (date_trunc('day'::text, now()) + '1 day'::interval)))
+                    Buffers: shared hit=6
+Planning:
+  Buffers: shared hit=112
+Planning Time: 1.177 ms
+Execution Time: 0.564 ms
+
+## Daily delivery rate by event type (index on event_type, created_at)
+SELECT event_type, count(*) FILTER (WHERE delivered_at IS NOT NULL) AS delivered, count(*) AS total
+    FROM notifications
+    WHERE event_type = 'TXNX-001' AND created_at >= now() - interval '1 day'
+    GROUP BY 1
+
+GroupAggregate  (cost=0.15..47.17 rows=1 width=33) (actual time=0.046..0.047 rows=1 loops=1)
+  Buffers: shared hit=14
+  ->  Append  (cost=0.15..47.09 rows=14 width=25) (actual time=0.007..0.042 rows=9 loops=1)
+        Buffers: shared hit=14
+        Subplans Removed: 1
+        ->  Seq Scan on notifications_2026_10 notifications_1  (cost=0.00..6.18 rows=9 width=17) (actual time=0.007..0.016 rows=9 loops=1)
+              Filter: ((event_type = 'TXNX-001'::text) AND (created_at >= (now() - '1 day'::interval)))
+              Buffers: shared hit=6
+        ->  Index Scan using notifications_2026_11_event_type_created_at_idx on notifications_2026_11 notifications_2  (cost=0.15..8.17 rows=1 width=40) (actual time=0.003..0.003 rows=0 loops=1)
+              Index Cond: ((event_type = 'TXNX-001'::text) AND (created_at >= (now() - '1 day'::interval)))
+              Buffers: shared hit=2
+        ->  Index Scan using notifications_2026_12_event_type_created_at_idx on notifications_2026_12 notifications_3  (cost=0.15..8.17 rows=1 width=40) (actual time=0.002..0.002 rows=0 loops=1)
+              Index Cond: ((event_type = 'TXNX-001'::text) AND (created_at >= (now() - '1 day'::interval)))
+              Buffers: shared hit=2
+        ->  Index Scan using notifications_2027_01_event_type_created_at_idx on notifications_2027_01 notifications_4  (cost=0.15..8.17 rows=1 width=40) (actual time=0.013..0.013 rows=0 loops=1)
+              Index Cond: ((event_type = 'TXNX-001'::text) AND (created_at >= (now() - '1 day'::interval)))
+              Buffers: shared hit=2
+        ->  Index Scan using notifications_default_event_type_created_at_idx on notifications_default notifications_5  (cost=0.15..8.17 rows=1 width=40) (actual time=0.006..0.006 rows=0 loops=1)
+              Index Cond: ((event_type = 'TXNX-001'::text) AND (created_at >= (now() - '1 day'::interval)))
+              Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=59
+Planning Time: 0.583 ms
+Execution Time: 0.099 ms
+
+## Same report from the hourly aggregate maintained by the analytics consumer (CQRS read model)
+SELECT date_trunc('day', bucket) AS day, channel,
+           sum(value) FILTER (WHERE metric = 'sent')      AS sent,
+           sum(value) FILTER (WHERE metric = 'delivered') AS delivered
+    FROM analytics_hourly
+    WHERE bucket >= date_trunc('day', now()) - interval '1 day'
+    GROUP BY 1, 2 ORDER BY 1, 2
+
+Sort  (cost=30.21..30.56 rows=138 width=104) (actual time=0.225..0.225 rows=3 loops=1)
+  Sort Key: (date_trunc('day'::text, bucket)), channel
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=4
+  ->  HashAggregate  (cost=22.89..25.31 rows=138 width=104) (actual time=0.215..0.217 rows=3 loops=1)
+        Group Key: date_trunc('day'::text, bucket), channel
+        Batches: 1  Memory Usage: 40kB
+        Buffers: shared hit=4
+        ->  Bitmap Heap Scan on analytics_hourly  (cost=5.65..20.00 rows=193 width=80) (actual time=0.010..0.016 rows=15 loops=1)
+              Recheck Cond: (bucket >= (date_trunc('day'::text, now()) - '1 day'::interval))
+              Heap Blocks: exact=3
+              Buffers: shared hit=4
+              ->  Bitmap Index Scan on analytics_hourly_pkey  (cost=0.00..5.61 rows=193 width=0) (actual time=0.008..0.008 rows=15 loops=1)
+                    Index Cond: (bucket >= (date_trunc('day'::text, now()) - '1 day'::interval))
+                    Buffers: shared hit=1
+Planning:
+  Buffers: shared hit=9
+Planning Time: 0.084 ms
+Execution Time: 0.243 ms
+
+## Per-user notification list (composite index user_id, state, channel)
+SELECT id, channel, state, created_at FROM notifications
+    WHERE user_id = (SELECT user_id FROM notifications LIMIT 1) AND state = 'DELIVERED' AND channel = 'push'
+    ORDER BY created_at DESC LIMIT 20
+
+Limit  (cost=47.22..47.24 rows=7 width=73) (actual time=0.036..0.037 rows=3 loops=1)
+  Buffers: shared hit=17
+  InitPlan 1 (returns $0)
+    ->  Limit  (cost=0.00..0.11 rows=1 width=16) (actual time=0.004..0.005 rows=1 loops=1)
+          Buffers: shared hit=1
+          ->  Append  (cost=0.00..65.14 rows=609 width=16) (actual time=0.004..0.004 rows=1 loops=1)
+                Buffers: shared hit=1
+                ->  Seq Scan on notifications_2026_09 notifications_8  (cost=0.00..11.20 rows=120 width=16) (actual time=0.002..0.002 rows=0 loops=1)
+                ->  Seq Scan on notifications_2026_10 notifications_9  (cost=0.00..6.09 rows=9 width=16) (actual time=0.002..0.002 rows=1 loops=1)
+                      Buffers: shared hit=1
+                ->  Seq Scan on notifications_2026_11 notifications_10  (cost=0.00..11.20 rows=120 width=16) (never executed)
+                ->  Seq Scan on notifications_2026_12 notifications_11  (cost=0.00..11.20 rows=120 width=16) (never executed)
+                ->  Seq Scan on notifications_2027_01 notifications_12  (cost=0.00..11.20 rows=120 width=16) (never executed)
+                ->  Seq Scan on notifications_default notifications_13  (cost=0.00..11.20 rows=120 width=16) (never executed)
+  ->  Sort  (cost=47.12..47.13 rows=7 width=73) (actual time=0.035..0.035 rows=3 loops=1)
+        Sort Key: notifications.created_at DESC
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=17
+        ->  Append  (cost=0.14..47.02 rows=7 width=73) (actual time=0.015..0.027 rows=3 loops=1)
+              Buffers: shared hit=17
+              ->  Index Scan using notifications_2026_09_user_id_created_at_id_idx on notifications_2026_09 notifications_1  (cost=0.14..8.17 rows=1 width=88) (actual time=0.009..0.009 rows=0 loops=1)
+                    Index Cond: (user_id = $0)
+                    Filter: ((state = 'DELIVERED'::text) AND (channel = 'push'::text))
+                    Buffers: shared hit=3
+              ->  Seq Scan on notifications_2026_10 notifications_2  (cost=0.00..6.16 rows=2 width=37) (actual time=0.006..0.011 rows=3 loops=1)
+                    Filter: ((user_id = $0) AND (state = 'DELIVERED'::text) AND (channel = 'push'::text))
+                    Rows Removed by Filter: 6
+                    Buffers: shared hit=6
+              ->  Index Scan using notifications_2026_11_user_id_created_at_id_idx on notifications_2026_11 notifications_3  (cost=0.14..8.17 rows=1 width=88) (actual time=0.001..0.001 rows=0 loops=1)
+                    Index Cond: (user_id = $0)
+                    Filter: ((state = 'DELIVERED'::text) AND (channel = 'push'::text))
+                    Buffers: shared hit=2
+              ->  Index Scan using notifications_2026_12_user_id_created_at_id_idx on notifications_2026_12 notifications_4  (cost=0.14..8.17 rows=1 width=88) (actual time=0.004..0.004 rows=0 loops=1)
+                    Index Cond: (user_id = $0)
+                    Filter: ((state = 'DELIVERED'::text) AND (channel = 'push'::text))
+                    Buffers: shared hit=2
+              ->  Index Scan using notifications_2027_01_user_id_created_at_id_idx on notifications_2027_01 notifications_5  (cost=0.14..8.17 rows=1 width=88) (actual time=0.001..0.001 rows=0 loops=1)
+                    Index Cond: (user_id = $0)
+                    Filter: ((state = 'DELIVERED'::text) AND (channel = 'push'::text))
+                    Buffers: shared hit=2
+              ->  Index Scan using notifications_default_user_id_created_at_id_idx on notifications_default notifications_6  (cost=0.14..8.17 rows=1 width=88) (actual time=0.001..0.001 rows=0 loops=1)
+                    Index Cond: (user_id = $0)
+                    Filter: ((state = 'DELIVERED'::text) AND (channel = 'push'::text))
+                    Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=116
+Planning Time: 0.625 ms
+Execution Time: 0.071 ms

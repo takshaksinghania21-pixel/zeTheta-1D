@@ -355,6 +355,49 @@
           "statusUrl"
         ]
       },
+      "PdfIngestResponse": {
+        "type": "object",
+        "properties": {
+          "notification_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "CREATED",
+              "DUPLICATE"
+            ]
+          },
+          "channels_targeted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "estimated_delivery_ms": {
+            "type": "number"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "status_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "notification_id",
+          "event_id",
+          "status",
+          "channels_targeted",
+          "estimated_delivery_ms",
+          "created_at",
+          "status_url"
+        ]
+      },
       "EventEnvelope": {
         "type": "object",
         "properties": {
@@ -387,6 +430,59 @@
           "eventType",
           "userId",
           "occurredAt",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "PdfEventEnvelope": {
+        "type": "object",
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "pattern": "^[A-Z]{4}-\\d{3}$"
+          },
+          "event_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "source_system": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "user_id": {
+            "type": "string",
+            "pattern": "^(usr_)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9:_|./-]+$"
+          }
+        },
+        "required": [
+          "event_type",
+          "event_id",
+          "source_system",
+          "timestamp",
+          "user_id",
           "payload"
         ],
         "additionalProperties": false
@@ -795,6 +891,268 @@
           "nextCursor"
         ]
       },
+      "NotificationDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "state": {
+            "$ref": "#/components/schemas/NotificationState"
+          },
+          "locale": {
+            "$ref": "#/components/schemas/Locale"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "body": {
+            "type": "string",
+            "nullable": true
+          },
+          "viaOverride": {
+            "type": "boolean"
+          },
+          "isDigest": {
+            "type": "boolean"
+          },
+          "parentNotificationId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "attemptCount": {
+            "type": "integer"
+          },
+          "retryCount": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastErrorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "queuedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "sentAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "deliveredAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "readAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "clickedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "nextAttemptAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "priorityLabel": {
+            "$ref": "#/components/schemas/Priority"
+          },
+          "notification_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NotificationState"
+          },
+          "template_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "external_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "delivery_attempts": {
+            "type": "integer"
+          },
+          "rendered_content": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "state_history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string"
+                },
+                "timestamp": {
+                  "type": "string"
+                },
+                "actor": {
+                  "type": "string"
+                },
+                "metadata": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              },
+              "required": [
+                "status",
+                "timestamp",
+                "actor"
+              ]
+            }
+          },
+          "compliance": {
+            "type": "object",
+            "properties": {
+              "dnd_checked": {
+                "type": "boolean"
+              },
+              "dnd_check_timestamp": {
+                "type": "string",
+                "nullable": true
+              },
+              "dnd_result": {
+                "type": "string",
+                "nullable": true
+              },
+              "classification": {
+                "type": "string"
+              },
+              "regulatory_override": {
+                "type": "boolean"
+              },
+              "frequency_cap_checked": {
+                "type": "boolean"
+              },
+              "frequency_cap_result": {
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "required": [
+              "dnd_checked",
+              "dnd_check_timestamp",
+              "dnd_result",
+              "classification",
+              "regulatory_override",
+              "frequency_cap_checked",
+              "frequency_cap_result"
+            ]
+          },
+          "cost_paisa": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "delivered_at": {
+            "type": "string",
+            "nullable": true
+          },
+          "latency_ms": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "eventId",
+          "userId",
+          "eventType",
+          "category",
+          "channel",
+          "priority",
+          "state",
+          "locale",
+          "title",
+          "body",
+          "viaOverride",
+          "isDigest",
+          "parentNotificationId",
+          "attemptCount",
+          "retryCount",
+          "provider",
+          "lastErrorCode",
+          "createdAt",
+          "queuedAt",
+          "sentAt",
+          "deliveredAt",
+          "readAt",
+          "clickedAt",
+          "nextAttemptAt",
+          "priorityLabel",
+          "notification_id",
+          "event_type",
+          "user_id",
+          "status",
+          "template_id",
+          "external_id",
+          "delivery_attempts",
+          "rendered_content",
+          "state_history",
+          "compliance",
+          "cost_paisa",
+          "created_at",
+          "delivered_at",
+          "latency_ms"
+        ]
+      },
       "Contact": {
         "type": "object",
         "properties": {
@@ -991,7 +1349,7 @@
             "type": "object",
             "nullable": true,
             "properties": {
-              "capHits": {
+              "notificationsInWindow": {
                 "type": "number"
               },
               "suggestedFrequency": {
@@ -1002,7 +1360,7 @@
               }
             },
             "required": [
-              "capHits",
+              "notificationsInWindow",
               "suggestedFrequency",
               "suggestedAt"
             ]
@@ -1012,6 +1370,97 @@
             "items": {
               "type": "string"
             }
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "global_preferences": {
+            "type": "object",
+            "properties": {
+              "quiet_hours": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "string"
+                  },
+                  "end": {
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "start",
+                  "end",
+                  "timezone"
+                ]
+              },
+              "language": {
+                "type": "string"
+              },
+              "digest_mode": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "quiet_hours",
+              "language",
+              "digest_mode"
+            ]
+          },
+          "category_preferences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "string"
+                },
+                "channels": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  }
+                },
+                "digest_mode": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "category",
+                "channels",
+                "digest_mode"
+              ]
+            }
+          },
+          "regulatory_overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "type": "string"
+                },
+                "channels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "cannot_disable": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "event_type",
+                "channels",
+                "cannot_disable"
+              ]
+            }
+          },
+          "updated_at": {
+            "type": "string"
           }
         },
         "required": [
@@ -1020,8 +1469,56 @@
           "explicit",
           "effective",
           "digestSuggestion",
-          "hierarchy"
+          "hierarchy",
+          "user_id",
+          "global_preferences",
+          "category_preferences",
+          "regulatory_overrides",
+          "updated_at"
         ]
+      },
+      "PdfPreferenceUpdate": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "pattern": "^[A-Z]{4}$"
+          },
+          "channels": {
+            "type": "object",
+            "properties": {
+              "sms": {
+                "type": "boolean"
+              },
+              "email": {
+                "type": "boolean"
+              },
+              "push": {
+                "type": "boolean"
+              },
+              "whatsapp": {
+                "type": "boolean"
+              },
+              "in_app": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "digest_mode": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "hourly",
+              "daily"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "channels"
+        ],
+        "additionalProperties": false
       },
       "ConsentRecord": {
         "type": "object",
@@ -1086,6 +1583,13 @@
             "type": "number",
             "nullable": true
           },
+          "experimentVersion": {
+            "type": "number",
+            "nullable": true
+          },
+          "experimentPercent": {
+            "type": "number"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -1099,6 +1603,8 @@
           "channel",
           "locale",
           "activeVersion",
+          "experimentVersion",
+          "experimentPercent",
           "createdAt",
           "updatedAt"
         ]
@@ -1274,6 +1780,15 @@
           "reasonCode": {
             "type": "string"
           },
+          "classification": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "TRANSIENT",
+              "PERMANENT",
+              "CONFIGURATION"
+            ]
+          },
           "reasonMessage": {
             "type": "string"
           },
@@ -1321,6 +1836,7 @@
           "eventId",
           "channel",
           "reasonCode",
+          "classification",
           "reasonMessage",
           "attempts",
           "retryHistory",
@@ -1660,7 +2176,7 @@
       "post": {
         "operationId": "ingestEvent",
         "summary": "Submit a financial event for asynchronous processing",
-        "description": "Validates the envelope and payload against the taxonomy, de-duplicates by (source, idempotencyKey) and publishes the event via the transactional outbox. Returns 202 for new events and 200 for exact duplicates; 409 if the key was used with a different payload.\n\n**Required permission:** events:ingest",
+        "description": "Validates the envelope and payload against the taxonomy, de-duplicates by (source, idempotencyKey) and publishes the event via the transactional outbox. Returns 202 for new events and 200 for exact duplicates; 409 if the key was used with a different payload.\n\nAlso accepts the PDF Appendix A snake_case envelope (`event_type`, `event_id`, `source_system`, `timestamp`, `priority`, `user_id`, `payload`, `idempotency_key`); such requests are answered in the Appendix A shape, with `VALIDATION_FAILED` (422) errors. `notification_id` is the id of the notification request (one per event); per-channel notifications are listed at `status_url`.\n\n**Required permission:** events:ingest",
         "tags": [
           "Events"
         ],
@@ -1674,7 +2190,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EventEnvelope"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/EventEnvelope"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PdfEventEnvelope"
+                  }
+                ]
               }
             }
           }
@@ -1685,7 +2208,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IngestResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IngestResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PdfIngestResponse"
+                    }
+                  ]
                 }
               }
             }
@@ -1695,7 +2225,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IngestResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IngestResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PdfIngestResponse"
+                    }
+                  ]
                 }
               }
             }
@@ -2249,7 +2786,7 @@
       "get": {
         "operationId": "getNotification",
         "summary": "Get a notification by id",
-        "description": "**Required permission:** notifications:read:any or notifications:read:own",
+        "description": "Includes the PDF Appendix A fields (p.65–66): `priority` is the §A8 number (1 = CRITICAL … 5 = LOW; the label is in `priorityLabel`), `channel` uses `in_app`, plus `state_history` and the `compliance` evidence (DND check timestamp and result, classification, regulatory override, frequency-cap result).\n\n**Required permission:** notifications:read:any or notifications:read:own",
         "tags": [
           "Notifications"
         ],
@@ -2275,7 +2812,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Notification"
+                  "$ref": "#/components/schemas/NotificationDetail"
                 }
               }
             }
@@ -3694,6 +4231,132 @@
             }
           }
         }
+      },
+      "put": {
+        "operationId": "updateCategoryPreferencesPdf",
+        "summary": "Update one category (PDF Appendix A shape): channels and digest mode",
+        "description": "Mandatory (regulatory) channels cannot be disabled; the response lists warnings for the events the change affects. Rate limited to 10 requests/minute per principal.",
+        "tags": [
+          "Preferences"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PdfPreferenceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "updated"
+                      ]
+                    },
+                    "category": {
+                      "type": "string"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "cache_invalidated": {
+                      "type": "boolean"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "category",
+                    "warnings",
+                    "cache_invalidated",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error (details are never exposed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/users/{userId}/preferences/channels": {
@@ -4071,6 +4734,7 @@
                   "frequency": {
                     "type": "string",
                     "enum": [
+                      "HOURLY",
                       "DAILY",
                       "WEEKLY"
                     ]
@@ -5973,6 +6637,124 @@
         }
       }
     },
+    "/api/v1/templates/{id}/experiment": {
+      "post": {
+        "operationId": "setTemplateExperiment",
+        "summary": "Start or stop an A/B test: `percent` of users get `version` (0 stops it)",
+        "description": "Assignment is deterministic per user (hash of template id and user id), so a user always sees the same variant. The variant used is recorded on each notification (`template_version`); compare variants with GET /analytics/template-variants.\n\n**Required permission:** templates:write",
+        "tags": [
+          "Templates"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "nullable": true,
+                    "minimum": 1
+                  },
+                  "percent": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                },
+                "required": [
+                  "version",
+                  "percent"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Template"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template or version not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error (details are never exposed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/webhooks/mock": {
       "post": {
         "operationId": "mockWebhook",
@@ -6656,6 +7438,28 @@
           },
           {
             "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_]{1,64}$"
+            },
+            "required": false,
+            "name": "reason",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "TRANSIENT",
+                "PERMANENT",
+                "CONFIGURATION"
+              ]
+            },
+            "required": false,
+            "name": "classification",
+            "in": "query"
+          },
+          {
+            "schema": {
               "type": "integer",
               "minimum": 1,
               "maximum": 100,
@@ -6813,6 +7617,15 @@
                     "reasonCode": {
                       "type": "string"
                     },
+                    "classification": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "TRANSIENT",
+                        "PERMANENT",
+                        "CONFIGURATION"
+                      ]
+                    },
                     "reasonMessage": {
                       "type": "string"
                     },
@@ -6869,6 +7682,7 @@
                     "eventId",
                     "channel",
                     "reasonCode",
+                    "classification",
                     "reasonMessage",
                     "attempts",
                     "retryHistory",
@@ -8007,6 +8821,15 @@
           {
             "schema": {
               "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
               "enum": [
                 "channel",
                 "eventType"
@@ -8115,6 +8938,15 @@
             },
             "required": false,
             "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
             "in": "query"
           },
           {
@@ -8231,6 +9063,15 @@
             "required": false,
             "name": "to",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
           }
         ],
         "responses": {
@@ -8330,6 +9171,15 @@
             },
             "required": false,
             "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
             "in": "query"
           }
         ],
@@ -8431,6 +9281,15 @@
             "required": false,
             "name": "to",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
           }
         ],
         "responses": {
@@ -8530,6 +9389,15 @@
             },
             "required": false,
             "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
             "in": "query"
           }
         ],
@@ -8631,6 +9499,15 @@
             "required": false,
             "name": "to",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
           }
         ],
         "responses": {
@@ -8731,11 +9608,593 @@
             "required": false,
             "name": "to",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
           }
         ],
         "responses": {
           "200": {
             "description": "Metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error (details are never exposed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/channel-performance": {
+      "get": {
+        "operationId": "getChannelPerformance",
+        "summary": "Per-channel delivery, read/click, latency percentiles and cost (PDF Day 10)",
+        "description": "**Required permission:** analytics:read",
+        "tags": [
+          "Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error (details are never exposed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/opt-out-trends": {
+      "get": {
+        "operationId": "getOptOutTrends",
+        "summary": "Daily opt-outs by channel/category and the rolling 30-day rate (PDF Day 10)",
+        "description": "**Required permission:** analytics:read",
+        "tags": [
+          "Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error (details are never exposed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/template-variants": {
+      "get": {
+        "operationId": "getTemplateVariants",
+        "summary": "A/B test comparison: delivery, read and click rates per template version",
+        "description": "**Required permission:** analytics:read",
+        "tags": [
+          "Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z]{4}-\\d{3}$"
+            },
+            "required": false,
+            "name": "eventType",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error (details are never exposed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/preference-changes": {
+      "get": {
+        "operationId": "getPreferenceChanges",
+        "summary": "Which preferences users change most often (PDF Day 5)",
+        "description": "**Required permission:** analytics:read",
+        "tags": [
+          "Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated but not authorised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error (details are never exposed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/delivery-rates": {
+      "get": {
+        "operationId": "getDeliveryRatesPdf",
+        "summary": "Delivery and read rates by channel and priority, caps, DND blocks and cost",
+        "description": "**Required permission:** analytics:read",
+        "tags": [
+          "Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}[hd]$"
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "default": "all"
+            },
+            "required": false,
+            "name": "channel",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Appendix A shape",
             "content": {
               "application/json": {
                 "schema": {

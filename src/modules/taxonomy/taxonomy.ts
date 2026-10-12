@@ -6,7 +6,6 @@ import {
   CATEGORIES,
   CHANNELS,
   PRIORITIES,
-  REGULATORY_CLASSES,
   type Category,
   type Channel,
   type Priority,
@@ -24,10 +23,11 @@ const FIELD_TYPES = [
   'datetime',
   'boolean',
   'url',
+  'array',
 ] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
-const fieldSpecSchema = z.strictObject({
+const itemSpecSchema = z.strictObject({
   $ref: z.string().optional(),
   type: z.enum(FIELD_TYPES).optional(),
   required: z.boolean().optional(),
@@ -38,6 +38,15 @@ const fieldSpecSchema = z.strictObject({
   maxLength: z.number().int().min(1).optional(),
   pattern: z.string().optional(),
   values: z.array(z.string()).optional(),
+  /** datetime: must be later than the time of validation. */
+  future: z.boolean().optional(),
+  /** number/decimal: must be > 0. */
+  positive: z.boolean().optional(),
+});
+/** `array` fields hold objects whose fields are declared in `items` (one level deep). */
+const fieldSpecSchema = itemSpecSchema.extend({
+  items: z.record(z.string(), itemSpecSchema).optional(),
+  maxItems: z.number().int().min(1).optional(),
 });
 type RawFieldSpec = z.infer<typeof fieldSpecSchema>;
 
@@ -51,6 +60,10 @@ export interface FieldDefinition {
   maxLength?: number;
   pattern?: string;
   values?: string[];
+  future?: boolean;
+  positive?: boolean;
+  items?: Record<string, FieldDefinition>;
+  maxItems?: number;
 }
 
 const channelEnum = z.enum(CHANNELS);
@@ -60,7 +73,8 @@ const rawEventSchema = z.strictObject({
   name: z.string().min(1),
   category: z.enum(CATEGORIES),
   priority: z.enum(PRIORITIES),
-  regulatoryClass: z.enum(REGULATORY_CLASSES),
+  // PDF §A6.1: every notification is TRANSACTIONAL or PROMOTIONAL.
+  regulatoryClass: z.enum(['TRANSACTIONAL', 'PROMOTIONAL']),
   permittedChannels: z.array(channelEnum).min(1),
   defaultChannels: z.array(channelEnum).min(1),
   fallbackChannels: z.array(channelEnum).default([]),
@@ -69,7 +83,11 @@ const rawEventSchema = z.strictObject({
   quietHours: z.enum(['DEFER', 'BYPASS']),
   frequencyCapExempt: z.boolean(),
   idempotencyKeyFields: z.array(z.string()).min(1),
+  /** Buckets occurredAt into this window in derived keys (storm dedup, PDF §B2.4). */
+  idempotencyWindowSeconds: z.number().int().positive().optional(),
   cooldownKeyFields: z.array(z.string()).default([]),
+  /** Overrides the policy's same-type cooldown for this event (e.g. price alerts). */
+  cooldownSeconds: z.number().int().min(0).optional(),
   payload: z.record(z.string(), fieldSpecSchema),
 });
 
@@ -98,7 +116,9 @@ export interface EventDefinition {
   quietHours: 'DEFER' | 'BYPASS';
   frequencyCapExempt: boolean;
   idempotencyKeyFields: string[];
+  idempotencyWindowSeconds?: number;
   cooldownKeyFields: string[];
+  cooldownSeconds?: number;
   fields: Record<string, FieldDefinition>;
   /** Compiled strict payload validator (rejects unknown fields, applies defaults). */
   schema: z.ZodType<Record<string, unknown>>;
@@ -127,6 +147,7 @@ function compileField(def: FieldDefinition): z.ZodType {
       n = n.refine(Number.isFinite, 'must be finite');
       if (def.min !== undefined) n = n.min(def.min);
       if (def.max !== undefined) n = n.max(def.max);
+      if (def.positive) n = n.refine((v) => v > 0, 'must be a positive number');
       schema = n;
       break;
     }
@@ -140,7 +161,8 @@ function compileField(def: FieldDefinition): z.ZodType {
         .transform((v) => (typeof v === 'number' ? String(v) : v.trim()))
         .refine((v) => DECIMAL.test(v), 'must be a decimal with at most 6 fractional digits')
         .refine((v) => min === undefined || Number(v) >= min, `must be >= ${min}`)
-        .refine((v) => max === undefined || Number(v) <= max, `must be <= ${max}`);
+        .refine((v) => max === undefined || Number(v) <= max, `must be <= ${max}`)
+        .refine((v) => !def.positive || Number(v) > 0, 'must be a positive number');
       break;
     }
     case 'enum': {
@@ -151,9 +173,13 @@ function compileField(def: FieldDefinition): z.ZodType {
     case 'date':
       schema = z.iso.date();
       break;
-    case 'datetime':
-      schema = z.iso.datetime({ offset: true });
+    case 'datetime': {
+      const iso = z.iso.datetime({ offset: true });
+      schema = def.future
+        ? iso.refine((v) => Date.parse(v) > Date.now(), 'must be a future timestamp')
+        : iso;
       break;
+    }
     case 'boolean':
       schema = z.boolean();
       break;
@@ -161,6 +187,12 @@ function compileField(def: FieldDefinition): z.ZodType {
       let u = z.url({ protocol: /^https$/ });
       if (def.maxLength !== undefined) u = u.max(def.maxLength);
       schema = u;
+      break;
+    }
+    case 'array': {
+      const shape: Record<string, z.ZodType> = {};
+      for (const [name, item] of Object.entries(def.items ?? {})) shape[name] = compileField(item);
+      schema = z.array(z.strictObject(shape)).max(def.maxItems ?? 100);
       break;
     }
   }
@@ -198,6 +230,19 @@ function resolveField(
     ...(merged.maxLength !== undefined ? { maxLength: merged.maxLength } : {}),
     ...(merged.pattern !== undefined ? { pattern: merged.pattern } : {}),
     ...(merged.values !== undefined ? { values: merged.values } : {}),
+    ...(merged.future ? { future: true } : {}),
+    ...(merged.positive ? { positive: true } : {}),
+    ...(merged.maxItems !== undefined ? { maxItems: merged.maxItems } : {}),
+    ...(merged.type === 'array'
+      ? {
+          items: Object.fromEntries(
+            Object.entries(merged.items ?? {}).map(([k, v]) => [
+              k,
+              resolveField(`${name}.${k}`, v, library, eventCode),
+            ]),
+          ),
+        }
+      : {}),
   };
 }
 
@@ -268,7 +313,11 @@ export class EventTaxonomy {
         quietHours: e.quietHours,
         frequencyCapExempt: e.frequencyCapExempt,
         idempotencyKeyFields: e.idempotencyKeyFields,
+        ...(e.idempotencyWindowSeconds
+          ? { idempotencyWindowSeconds: e.idempotencyWindowSeconds }
+          : {}),
         cooldownKeyFields: e.cooldownKeyFields,
+        ...(e.cooldownSeconds !== undefined ? { cooldownSeconds: e.cooldownSeconds } : {}),
         fields,
         schema,
       };
@@ -324,10 +373,20 @@ export class EventTaxonomy {
   }
 
   /** Deterministic idempotency key derived from the event's declared key fields. */
-  deriveIdempotencyKey(code: string, userId: string, payload: Record<string, unknown>): string {
+  deriveIdempotencyKey(
+    code: string,
+    userId: string,
+    payload: Record<string, unknown>,
+    occurredAt?: string,
+  ): string {
     const def = this.byCode.get(code);
     if (!def) throw new Error(`Unknown event type ${code}`);
     const parts = def.idempotencyKeyFields.map((f) => String(payload[f]));
+    // (event_type + entity + timestamp window): one notification per user/entity/window.
+    if (def.idempotencyWindowSeconds && occurredAt) {
+      const windowMs = def.idempotencyWindowSeconds * 1000;
+      parts.push(`w${Math.floor(new Date(occurredAt).getTime() / windowMs)}`);
+    }
     return `${code}:${userId}:${parts.join('|')}`;
   }
 

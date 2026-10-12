@@ -43,12 +43,17 @@ export const SAMPLE_PAYLOADS: Record<string, Record<string, unknown>> = {
     depositedAt: '2026-01-15T12:30:00+05:30',
     availableBalance: '48250.75',
   },
+  // Appendix A sample payload (deadlines moved into the future so they stay valid).
   'RISK-001': {
-    marginCallId: 'MC-77',
-    marginRequired: '125000',
-    marginAvailable: '80000',
-    utilisationPercent: 156.25,
-    deadline: '2026-01-15T15:30:00+05:30',
+    shortfallAmount: 125000.0,
+    currentMargin: 375000.0,
+    requiredMargin: 500000.0,
+    deadline: '2099-03-19T11:30:00.000Z',
+    affectedPositions: [
+      { symbol: 'RELIANCE', qty: 500, currentValue: 620000.0 },
+      { symbol: 'INFY', qty: 200, currentValue: 340000.0 },
+    ],
+    autoSquareOffTime: '2099-03-19T12:00:00.000Z',
   },
   'RISK-002': {
     shortfallId: 'SF-12',

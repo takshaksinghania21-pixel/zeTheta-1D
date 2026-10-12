@@ -88,6 +88,42 @@ export const NotificationSchema = z
   })
   .meta({ id: 'Notification' });
 
+/** Detail view: the native fields plus the PDF Appendix A fields (p.65–66). */
+export const NotificationDetailSchema = NotificationSchema.extend({
+  priority: z.number().int().min(1).max(5),
+  priorityLabel: PriorityEnum,
+  channel: z.string(),
+  notification_id: z.uuid(),
+  event_type: z.string(),
+  user_id: z.uuid(),
+  status: StateEnum,
+  template_id: z.string().nullable(),
+  external_id: z.string().nullable(),
+  delivery_attempts: z.number().int(),
+  rendered_content: z.record(z.string(), z.unknown()).nullable(),
+  state_history: z.array(
+    z.object({
+      status: z.string(),
+      timestamp: z.string(),
+      actor: z.string(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    }),
+  ),
+  compliance: z.object({
+    dnd_checked: z.boolean(),
+    dnd_check_timestamp: z.string().nullable(),
+    dnd_result: z.string().nullable(),
+    classification: z.string(),
+    regulatory_override: z.boolean(),
+    frequency_cap_checked: z.boolean(),
+    frequency_cap_result: z.string().nullable(),
+  }),
+  cost_paisa: z.number().int(),
+  created_at: z.string(),
+  delivered_at: z.string().nullable(),
+  latency_ms: z.number().nullable(),
+}).meta({ id: 'NotificationDetail' });
+
 export const PageOf = <T extends z.ZodType>(item: T, id: string) =>
   z.object({ items: z.array(item), nextCursor: z.string().nullable() }).meta({ id });
 

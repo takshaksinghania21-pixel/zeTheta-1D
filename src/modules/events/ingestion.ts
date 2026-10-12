@@ -59,8 +59,14 @@ export class EventIngestionService {
   constructor(
     private readonly db: Knex,
     private readonly taxonomy: EventTaxonomy,
-    private readonly topic: string,
+    private readonly topicFor: (eventType: string) => string,
   ) {}
+
+  /** notification_events_received_total{event_type, priority, outcome} (PDF §A11.1). */
+  private count(eventType: string, outcome: string): void {
+    const priority = this.taxonomy.get(eventType)?.priority ?? 'UNKNOWN';
+    metrics.eventsIngested.inc({ event_type: eventType, priority, outcome });
+  }
 
   /** Validates against the taxonomy; throws 422 with field-level details. */
   validate(envelope: EventEnvelope): {
@@ -85,7 +91,12 @@ export class EventIngestionService {
       );
     const idempotencyKey =
       envelope.idempotencyKey ??
-      this.taxonomy.deriveIdempotencyKey(envelope.eventType, envelope.userId, res.payload);
+      this.taxonomy.deriveIdempotencyKey(
+        envelope.eventType,
+        envelope.userId,
+        res.payload,
+        envelope.occurredAt,
+      );
     return { payload: res.payload, category: def.category, idempotencyKey };
   }
 
@@ -96,6 +107,11 @@ export class EventIngestionService {
     batchId: string | null = null,
   ): Promise<IngestResult> {
     const { payload, category, idempotencyKey } = this.validate(envelope);
+    // Storm dedup (PDF §B2.4): a derived key with a time window collapses equivalent
+    // events whose payloads differ (e.g. a feed re-sending with a new price tick).
+    const windowed =
+      envelope.idempotencyKey === undefined &&
+      this.taxonomy.get(envelope.eventType)?.idempotencyWindowSeconds !== undefined;
     const payloadHash = sha256Hex(
       stableStringify({
         eventType: envelope.eventType,
@@ -139,6 +155,7 @@ export class EventIngestionService {
             idempotencyKey,
             payloadHash,
             envelope.eventType,
+            windowed,
           );
         const message: KafkaEventMessage = {
           eventId: id,
@@ -151,21 +168,17 @@ export class EventIngestionService {
         await enqueueOutbox(trx, [
           {
             destination: 'KAFKA',
-            topic: this.topic,
+            topic: this.topicFor(envelope.eventType),
             key: envelope.userId,
             payload: message,
             headers: { 'x-correlation-id': correlationId, 'x-event-type': envelope.eventType },
           },
         ]);
-        metrics.eventsIngested.inc({ event_type: envelope.eventType, outcome: 'accepted' });
+        this.count(envelope.eventType, 'accepted');
         return { status: 'ACCEPTED' as const, eventId: id, idempotencyKey };
       });
     } catch (err) {
-      if (err instanceof AppError)
-        metrics.eventsIngested.inc({
-          event_type: envelope.eventType,
-          outcome: err.code.toLowerCase(),
-        });
+      if (err instanceof AppError) this.count(envelope.eventType, err.code.toLowerCase());
       throw err;
     }
   }
@@ -176,19 +189,24 @@ export class EventIngestionService {
     key: string,
     hash: string,
     eventType: string,
+    windowed = false,
   ): Promise<IngestResult> {
     const existing = (await trx('financial_events')
       .where({ source, idempotency_key: key })
       .first('id', 'payload_hash')) as { id: string; payload_hash: string } | undefined;
     if (!existing) throw new ConflictError('Concurrent ingestion conflict; retry');
+    if (existing.payload_hash !== hash && windowed) {
+      this.count(eventType, 'deduplicated');
+      return { status: 'DUPLICATE', eventId: existing.id, idempotencyKey: key };
+    }
     if (existing.payload_hash !== hash) {
-      metrics.eventsIngested.inc({ event_type: eventType, outcome: 'idempotency_conflict' });
+      this.count(eventType, 'idempotency_conflict');
       throw new ConflictError(
         `Idempotency key '${key}' was already used with a different payload`,
         'IDEMPOTENCY_CONFLICT',
       );
     }
-    metrics.eventsIngested.inc({ event_type: eventType, outcome: 'duplicate' });
+    this.count(eventType, 'duplicate');
     return { status: 'DUPLICATE', eventId: existing.id, idempotencyKey: key };
   }
 

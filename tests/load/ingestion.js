@@ -1,6 +1,6 @@
 // k6 load test: event ingestion throughput + end-to-end processing.
 // Usage: k6 run -e BASE_URL=http://localhost:3000 -e CLIENT_ID=... -e CLIENT_SECRET=... \
-//          -e USER_IDS=<comma separated synthetic user ids> [-e EVENTS=10000] [-e VUS=50] [-e BATCH=100] load-tests/ingestion.js
+//          -e USER_IDS=<comma separated synthetic user ids> [-e EVENTS=10000] [-e VUS=50] [-e BATCH=100] tests/load/ingestion.js
 // Scenarios:
 //   single  – EVENTS/2 events via POST /events with VUS concurrent users
 //   batch   – EVENTS/2 events via POST /events/batch (BATCH per request)

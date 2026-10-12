@@ -91,8 +91,8 @@ describe('configuration safety', () => {
 
 describe('PII masking and log sanitisation', () => {
   it('masks contact values', () => {
-    expect(maskPhone('+919812345678')).toBe('+********5678');
-    expect(maskEmail('asha.rao@example.com')).toBe('a***@***.com');
+    expect(maskPhone('+919812345678')).toBe('+91XXXX5678'); // PDF §A10.2 formats
+    expect(maskEmail('asha.rao@example.com')).toBe('a***@example.com');
     expect(maskToken('abcdefghijklmnop')).toBe('abcd…mnop');
   });
 
@@ -108,11 +108,11 @@ describe('PII masking and log sanitisation', () => {
     }) as Record<string, unknown>;
     expect(out.password).toBe('[REDACTED]');
     expect(out.authorization).toBe('[REDACTED]');
-    expect(out.phone).toBe('+********5678');
-    expect(out.email).toBe('a***@***.co');
+    expect(out.phone).toBe('+91XXXX5678');
+    expect(out.email).toBe('a***@b.co');
     expect(out.correlationId).toBe('12345678-1234-4123-8123-123456789012');
     expect(out.nested).toEqual({
-      note: 'call ******5678 or mail x***@***.io',
+      note: 'call XXXX5678 or mail x***@y.io',
       token: '[REDACTED]',
     });
     expect(out.list).toEqual([{ apiKey: '[REDACTED]' }]);
@@ -131,13 +131,13 @@ describe('PII masking and log sanitisation', () => {
     const line = JSON.parse(lines.at(-1)!) as Record<string, unknown>;
     expect(line).toMatchObject({
       level: 'info',
-      service: 'svc',
+      service_name: 'svc',
       message: 'delivered',
-      correlationId: 'corr-log-123456',
-      recipient: '+********5678',
+      correlation_id: 'corr-log-123456',
+      recipient: '+91XXXX5678',
       password: '[REDACTED]',
     });
-    expect(new Date(line.time as string).toISOString()).toBe(line.time);
+    expect(new Date(line.timestamp as string).toISOString()).toBe(line.timestamp);
   });
 
   it('normalises correlation ids', () => {

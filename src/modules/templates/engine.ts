@@ -14,8 +14,16 @@ export interface ChannelTemplate {
 }
 
 export interface TemplateStore {
-  /** Active template for an exact (eventType, channel, locale), or null. */
-  getActive(eventType: string, channel: Channel, locale: Locale): Promise<ChannelTemplate | null>;
+  /**
+   * Active template for an exact (eventType, channel, locale), or null. `abSubject`
+   * (the user id) selects the A/B experiment variant deterministically when one runs.
+   */
+  getActive(
+    eventType: string,
+    channel: Channel,
+    locale: Locale,
+    abSubject?: string,
+  ): Promise<ChannelTemplate | null>;
 }
 
 export interface RenderInput {
@@ -27,6 +35,8 @@ export interface RenderInput {
   user: { name?: string | null };
   /** Payload fields that are required by the event schema. */
   requiredFields?: string[];
+  /** Stable subject (user id) for A/B variant assignment. */
+  abSubject?: string;
 }
 
 export interface RenderedContent {
@@ -298,7 +308,7 @@ export class TemplateEngine {
 
   constructor(
     private readonly store: TemplateStore,
-    private readonly options: { fallbackLocale: Locale; smsMaxSegments: number },
+    private readonly options: { fallbackLocale: Locale; smsMaxChars: number },
   ) {
     // The layout is the only HTML context, so it is compiled WITH escaping.
     this.layout = Handlebars.create().compile(EMAIL_LAYOUT, {
@@ -342,11 +352,17 @@ export class TemplateEngine {
     eventType: string,
     channel: Channel,
     locale: Locale,
+    abSubject?: string,
   ): Promise<{ template: ChannelTemplate; locale: Locale }> {
-    const exact = await this.store.getActive(eventType, channel, locale);
+    const exact = await this.store.getActive(eventType, channel, locale, abSubject);
     if (exact) return { template: exact, locale };
     if (locale !== this.options.fallbackLocale) {
-      const fallback = await this.store.getActive(eventType, channel, this.options.fallbackLocale);
+      const fallback = await this.store.getActive(
+        eventType,
+        channel,
+        this.options.fallbackLocale,
+        abSubject,
+      );
       if (fallback) return { template: fallback, locale: this.options.fallbackLocale };
     }
     throw new AppError(
@@ -361,6 +377,7 @@ export class TemplateEngine {
       input.eventType,
       input.channel,
       input.locale,
+      input.abSubject,
     );
     return this.renderTemplate(template, { ...input, locale }, input.locale, notificationRef);
   }
@@ -416,7 +433,7 @@ export class TemplateEngine {
     switch (input.channel) {
       case 'sms': {
         body = body.replace(/\s+/g, ' ').trim();
-        const truncated = truncateSms(body, this.options.smsMaxSegments);
+        const truncated = truncateSms(body, this.options.smsMaxChars);
         const info = smsInfo(truncated.text);
         out.body = truncated.text;
         out.sms = {

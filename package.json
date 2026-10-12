@@ -23,6 +23,7 @@
     "migrate:rollback": "tsx src/infrastructure/database/migrate.ts rollback",
     "migrate:prod": "node dist/src/infrastructure/database/migrate.js latest",
     "seed": "tsx scripts/seed.ts",
+    "datasets": "tsx scripts/generate-datasets.ts",
     "seed:prod": "node dist/scripts/seed.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "postman:generate": "tsx scripts/generate-postman.ts",
@@ -36,9 +37,10 @@
     "secrets:scan": "tsx scripts/scan-secrets.ts",
     "audit:deps": "npm audit --omit=dev --audit-level=high",
     "smoke": "tsx scripts/smoke-test.ts",
-    "load:ingest": "k6 run load-tests/ingestion.js",
-    "load:analytics": "k6 run load-tests/analytics.js",
-    "benchmark": "tsx scripts/benchmark.ts"
+    "load:ingest": "k6 run tests/load/ingestion.js",
+    "load:analytics": "k6 run tests/load/analytics.js",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "explain": "tsx scripts/explain-analyze.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "8.1.0",

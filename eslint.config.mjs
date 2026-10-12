@@ -9,7 +9,7 @@ export default tseslint.config(
       'coverage/**',
       'node_modules/**',
       '.local/**',
-      'load-tests/**',
+      'tests/load/**',
       'jest.config.js',
     ],
   },

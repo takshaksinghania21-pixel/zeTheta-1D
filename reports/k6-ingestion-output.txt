@@ -7,7 +7,7 @@
 
 
      execution: local
-        script: load-tests/ingestion.js
+        script: tests/load/ingestion.js
         output: -
 
      scenarios: (100.00%) 2 scenarios, 60 max VUs, 10m30s max duration (incl. graceful stop):
@@ -15,20 +15,20 @@
               * single: 5000 iterations shared among 50 VUs (maxDuration: 10m0s, exec: single, gracefulStop: 30s)
 
 
-running (00m01.0s), 60/60 VUs, 3012 complete and 0 interrupted iterations
+running (00m01.0s), 60/60 VUs, 2753 complete and 0 interrupted iterations
 batch    [   0% ] 10 VUs  00m01.0s/10m0s  00/50 shared iters
-single   [  60% ] 50 VUs  00m01.0s/10m0s  3012/5000 shared iters
+single   [  55% ] 50 VUs  00m01.0s/10m0s  2753/5000 shared iters
 
-running (00m02.0s), 10/60 VUs, 5020 complete and 0 interrupted iterations
-batch    [  40% ] 10 VUs  00m02.0s/10m0s  20/50 shared iters
-single ✓ [ 100% ] 50 VUs  00m01.5s/10m0s  5000/5000 shared iters
+running (00m02.0s), 10/60 VUs, 5013 complete and 0 interrupted iterations
+batch    [  26% ] 10 VUs  00m02.0s/10m0s  13/50 shared iters
+single ✓ [ 100% ] 50 VUs  00m01.7s/10m0s  5000/5000 shared iters
 
 
   █ THRESHOLDS 
 
     http_req_duration{scenario:single}
-    ✓ 'p(95)<500' p(95)=21.72ms
-    ✓ 'p(99)<1000' p(99)=29.2ms
+    ✓ 'p(95)<500' p(95)=27.59ms
+    ✓ 'p(99)<1000' p(99)=42.93ms
 
     http_req_failed{scenario:batch}
     ✓ 'rate<0.01' rate=0.00%
@@ -39,7 +39,7 @@ single ✓ [ 100% ] 50 VUs  00m01.5s/10m0s  5000/5000 shared iters
 
   █ TOTAL RESULTS 
 
-    checks_total.......: 5050    1995.675904/s
+    checks_total.......: 5050    1836.059852/s
     checks_succeeded...: 100.00% 5050 out of 5050
     checks_failed......: 0.00%   0 out of 5050
 
@@ -47,32 +47,32 @@ single ✓ [ 100% ] 50 VUs  00m01.5s/10m0s  5000/5000 shared iters
     ✓ batch 202
 
     CUSTOM
-    batch_request_duration.........: avg=495.79ms min=230.99ms med=271.64ms p(90)=1.41s   p(95)=1.41s   p(99)=1.42s   max=1.42s  
-    events_accepted................: 10000  3951.833473/s
+    batch_request_duration.........: avg=539.43ms min=196.16ms med=314.49ms p(90)=1.54s   p(95)=1.55s   p(99)=1.55s   max=1.56s  
+    events_accepted................: 10000  3635.762083/s
     events_rejected................: 0      0/s
 
     HTTP
-    http_req_duration..............: avg=19.93ms  min=6.51ms   med=14.56ms  p(90)=19.32ms p(95)=22.4ms  p(99)=75.65ms max=1.42s  
-      { expected_response:true }...: avg=19.93ms  min=6.51ms   med=14.56ms  p(90)=19.32ms p(95)=22.4ms  p(99)=75.65ms max=1.42s  
-      { scenario:single }..........: avg=15.17ms  min=6.51ms   med=14.54ms  p(90)=18.85ms p(95)=21.72ms p(99)=29.2ms  max=76.67ms
+    http_req_duration..............: avg=22.23ms  min=8.69ms   med=15.62ms  p(90)=21.82ms p(95)=29.01ms p(99)=55.61ms max=1.56s  
+      { expected_response:true }...: avg=22.23ms  min=8.69ms   med=15.62ms  p(90)=21.82ms p(95)=29.01ms p(99)=55.61ms max=1.56s  
+      { scenario:single }..........: avg=17.05ms  min=8.69ms   med=15.6ms   p(90)=21.27ms p(95)=27.59ms p(99)=42.93ms max=55.71ms
     http_req_failed................: 0.00%  0 out of 5051
       { scenario:batch }...........: 0.00%  0 out of 50
       { scenario:single }..........: 0.00%  0 out of 5000
-    http_reqs......................: 5051   1996.071087/s
+    http_reqs......................: 5051   1836.423428/s
 
     EXECUTION
-    iteration_duration.............: avg=19.98ms  min=7.42ms   med=14.59ms  p(90)=19.36ms p(95)=22.42ms p(99)=75.84ms max=1.42s  
-    iterations.....................: 5050   1995.675904/s
+    iteration_duration.............: avg=22.29ms  min=8.71ms   med=15.66ms  p(90)=21.88ms p(95)=29.31ms p(99)=55.66ms max=1.56s  
+    iterations.....................: 5050   1836.059852/s
     vus............................: 10     min=10        max=60
     vus_max........................: 60     min=60        max=60
 
     NETWORK
-    data_received..................: 7.8 MB 3.1 MB/s
-    data_sent......................: 5.6 MB 2.2 MB/s
+    data_received..................: 7.8 MB 2.8 MB/s
+    data_sent......................: 5.6 MB 2.0 MB/s
 
 
 
 
-running (00m02.5s), 00/60 VUs, 5050 complete and 0 interrupted iterations
-batch  ✓ [ 100% ] 10 VUs  00m02.5s/10m0s  50/50 shared iters
-single ✓ [ 100% ] 50 VUs  00m01.5s/10m0s  5000/5000 shared iters
+running (00m02.8s), 00/60 VUs, 5050 complete and 0 interrupted iterations
+batch  ✓ [ 100% ] 10 VUs  00m02.7s/10m0s  50/50 shared iters
+single ✓ [ 100% ] 50 VUs  00m01.7s/10m0s  5000/5000 shared iters

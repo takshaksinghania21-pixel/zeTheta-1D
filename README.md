@@ -233,7 +233,7 @@ statements/lines/functions 80 %, branches 70 %. Latest measured numbers:
 | Unit + integration + e2e tests                                          | all passing — counts and coverage in [docs/TESTING.md](docs/TESTING.md) |
 | ESLint (strict type-checked), Prettier, `tsc --noEmit`, `npm run build` | pass                                                                    |
 | Functional smoke test (15 steps, compiled build)                        | 15/15 — [`reports/smoke-test.json`](reports/smoke-test.json)            |
-| 10 000-event benchmark                                                  | [docs/PERFORMANCE.md](docs/PERFORMANCE.md)                              |
+| 10 000-event benchmark                                                  | [docs/performance-benchmarks.md](docs/performance-benchmarks.md)        |
 | `npm audit --omit=dev`                                                  | 0 vulnerabilities; dev-only findings in SECURITY.md                     |
 | Docker build / compose / CI                                             | **not executed** (see DEPLOYMENT.md)                                    |
 
@@ -272,6 +272,6 @@ PII masking, webhook verification, rate limiting, audit logs, and the
 [ARCHITECTURE.md](ARCHITECTURE.md) · [DEPLOYMENT.md](DEPLOYMENT.md) ·
 [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) ·
 [CHANGELOG.md](CHANGELOG.md) · [docs/TAXONOMY.md](docs/TAXONOMY.md) ·
-[docs/TESTING.md](docs/TESTING.md) · [docs/PERFORMANCE.md](docs/PERFORMANCE.md) ·
+[docs/TESTING.md](docs/TESTING.md) · [docs/performance-benchmarks.md](docs/performance-benchmarks.md) ·
 [docs/RUNBOOKS.md](docs/RUNBOOKS.md) · [docs/TRACEABILITY.md](docs/TRACEABILITY.md) ·
 [docs/SUBMISSION.md](docs/SUBMISSION.md)

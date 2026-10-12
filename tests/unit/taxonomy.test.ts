@@ -24,6 +24,82 @@ describe('event taxonomy', () => {
     }
   });
 
+  // PDF §A2 (p.5–8): urgency and channels per event; Appendix A (p.63) overrides.
+  const PDF_A2: Record<string, [string, string[]]> = {
+    'TXNX-001': ['HIGH', ['sms', 'push', 'email']],
+    'TXNX-002': ['HIGH', ['sms', 'push', 'email']],
+    'TXNX-003': ['HIGH', ['push', 'sms']],
+    'TXNX-004': ['MEDIUM', ['email', 'push']],
+    'TXNX-005': ['HIGH', ['sms', 'push']],
+    'RISK-001': ['CRITICAL', ['sms', 'push']],
+    'RISK-002': ['CRITICAL', ['sms', 'push', 'email']],
+    'RISK-003': ['CRITICAL', ['sms', 'push', 'email']],
+    'RISK-004': ['HIGH', ['push', 'email']],
+    'RISK-005': ['MEDIUM', ['email', 'inapp']],
+    'SIPX-001': ['MEDIUM', ['push', 'whatsapp']],
+    'SIPX-002': ['HIGH', ['sms', 'email']],
+    'SIPX-003': ['HIGH', ['sms', 'push', 'email']],
+    'SIPX-004': ['LOW', ['email', 'inapp']],
+    'SIPX-005': ['LOW', ['push', 'inapp']],
+    'MKTX-001': ['HIGH', ['push', 'sms']],
+    'MKTX-002': ['CRITICAL', ['push', 'sms']],
+    'MKTX-003': ['LOW', ['push']],
+    'MKTX-004': ['MEDIUM', ['push', 'email']],
+    'MKTX-005': ['MEDIUM', ['email', 'inapp']],
+    'REGX-001': ['HIGH', ['sms', 'email', 'push']],
+    'REGX-002': ['MEDIUM', ['email', 'push']],
+    'REGX-003': ['HIGH', ['email']],
+    'REGX-004': ['MEDIUM', ['email', 'inapp']],
+    'REGX-005': ['LOW', ['email']],
+  };
+
+  it.each(Object.entries(PDF_A2))('%s matches the PDF urgency and channels', (code, [p, ch]) => {
+    const def = taxonomy.get(code);
+    expect(def?.priority).toBe(p);
+    expect(def?.defaultChannels).toEqual(expect.arrayContaining(ch));
+    expect(def?.defaultChannels).toContain('inapp'); // in-app feed (Appendix A/B)
+    expect(def?.quietHours).toBe(p === 'CRITICAL' ? 'BYPASS' : 'DEFER');
+  });
+
+  it('makes SEBI/exchange-mandated channels non-disableable (Appendix A regulatory_overrides)', () => {
+    expect(taxonomy.get('RISK-001')?.mandatoryChannels).toEqual(['sms', 'push']);
+    expect(taxonomy.get('RISK-002')?.mandatoryChannels).toEqual(['sms', 'push', 'email']);
+    expect(taxonomy.get('REGX-001')?.mandatoryChannels).toEqual(['sms', 'email']);
+    for (const code of ['TXNX-001', 'TXNX-002', 'RISK-003', 'MKTX-002', 'REGX-003'])
+      expect(taxonomy.get(code)?.mandatoryChannels.length).toBeGreaterThan(0);
+  });
+
+  it('classifies every event as TRANSACTIONAL or PROMOTIONAL (PDF §A6.1)', () => {
+    for (const d of taxonomy.list())
+      expect(['TRANSACTIONAL', 'PROMOTIONAL']).toContain(d.regulatoryClass);
+    expect(taxonomy.get('SIPX-004')?.regulatoryClass).toBe('PROMOTIONAL'); // "SIP step-up suggestions"
+    expect(taxonomy.get('RISK-001')?.regulatoryClass).toBe('TRANSACTIONAL'); // margin calls
+    expect(() =>
+      EventTaxonomy.fromYaml(
+        mutate((doc) => {
+          doc.events[0]!.regulatoryClass = 'SERVICE';
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it('keeps the §E2 copies (docs/event-taxonomy.yaml, src/events/taxonomy.yaml) identical to config/', () => {
+    const source = readFileSync(yamlPath, 'utf8');
+    for (const copy of ['../../docs/event-taxonomy.yaml', '../../src/events/taxonomy.yaml'])
+      expect(readFileSync(path.resolve(__dirname, copy), 'utf8')).toBe(source);
+  });
+
+  it('dedupes a price-alert storm per user, stock and time window (PDF §B2.4)', () => {
+    const payload = SAMPLE_PAYLOADS['MKTX-001']!;
+    const key = (at: string, p = payload) => taxonomy.deriveIdempotencyKey('MKTX-001', 'u1', p, at);
+    expect(key('2026-10-12T10:00:01Z')).toBe(key('2026-10-12T10:00:09Z'));
+    expect(key('2026-10-12T10:00:01Z')).not.toBe(key('2026-10-12T10:01:01Z'));
+    expect(key('2026-10-12T10:00:01Z')).not.toBe(
+      key('2026-10-12T10:00:01Z', { ...payload, symbol: 'OTHERSTOCK' }),
+    );
+    expect(taxonomy.get('MKTX-001')?.cooldownSeconds).toBe(900);
+  });
+
   it('uses the assignment event codes and names', () => {
     expect(taxonomy.get('RISK-001')?.name).toBe('Margin Call Warning');
     expect(taxonomy.get('REGX-003')?.name).toBe('Contract Note Generated');
@@ -123,12 +199,12 @@ describe('event taxonomy', () => {
     expect(taxonomy.cooldownSubject(taxonomy.get('SIPX-001')!, {})).toBe('SIPX-001');
   });
 
-  it('marks only CRITICAL risk events as quiet-hours bypass', () => {
+  it('marks only CRITICAL events as quiet-hours bypass', () => {
     const bypass = taxonomy
       .list()
       .filter((d) => d.quietHours === 'BYPASS')
       .map((d) => d.code);
-    expect(bypass.sort()).toEqual(['RISK-001', 'RISK-002', 'RISK-003']);
+    expect(bypass.sort()).toEqual(['MKTX-002', 'RISK-001', 'RISK-002', 'RISK-003']);
   });
 
   describe('guard rails on taxonomy changes', () => {

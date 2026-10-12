@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-11T13:55:28.914Z",
+  "runAt": "2026-10-11T20:52:31.836Z",
   "environment": {
     "cpu": "Apple M5",
     "cores": 10,
@@ -15,15 +15,15 @@
     "eventType": "TXNX-001 (push+email+inapp → 3 notifications/event)"
   },
   "ingestion": {
-    "wallSeconds": 2.983,
+    "wallSeconds": 3.249,
     "httpRequests": 5051,
-    "httpRequestsPerSecond": 1996.071087161244,
+    "httpRequestsPerSecond": 1836.4234281237104,
     "httpFailedRate": 0,
     "httpDurationMs": {
-      "p50": 14.564,
-      "p95": 22.40649999999999,
-      "p99": 75.65049999999991,
-      "max": 1426.219
+      "p50": 15.623,
+      "p95": 29.01999999999999,
+      "p99": 55.613499999999995,
+      "max": 1565.974
     },
     "eventsAccepted": 10000,
     "eventsRejected": 0
@@ -31,21 +31,21 @@
   "processing": {
     "eventsProcessed": 10000,
     "notificationsStillPending": 0,
-    "totalSecondsUntilDrained": 94.601,
-    "endToEndEventsPerSecond": 105.70712783162969,
+    "totalSecondsUntilDrained": 95.789,
+    "endToEndEventsPerSecond": 104.39612064015701,
     "eventProcessingLatencyMs": {
-      "p50": 25770.184,
-      "p95": 48949.93379999999,
-      "p99": 51152.10366
+      "p50": 30688.1385,
+      "p95": 56746.1849,
+      "p99": 59134.9275
     },
     "notifications": {
       "notifications": 30000,
       "sent": 30000,
-      "p50": 17,
-      "p95": 50810.149999999994,
-      "p99": 55700.02,
-      "first_created": "2026-10-11T13:55:29.221Z",
-      "last_sent": "2026-10-11T13:57:02.800Z"
+      "p50": 18,
+      "p95": 37594.09999999997,
+      "p99": 46105,
+      "first_created": "2026-10-11T20:52:32.345Z",
+      "last_sent": "2026-10-11T20:54:05.981Z"
     }
   }
 }

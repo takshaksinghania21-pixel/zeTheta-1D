@@ -9,11 +9,12 @@ import {
 
 // Lua mirrors of the pure reducer in circuit-breaker.ts (contract-tested against it).
 const READ = `
-local s = redis.call('HMGET', KEYS[1], 'status', 'failures', 'openedAt', 'inflight')
+local s = redis.call('HMGET', KEYS[1], 'status', 'failures', 'openedAt', 'inflight', 'windowStartedAt')
 local status = s[1] or 'CLOSED'
 local failures = tonumber(s[2] or '0') or 0
 local openedAt = tonumber(s[3] or '')
 local inflight = tonumber(s[4] or '0') or 0
+local windowStartedAt = tonumber(s[5] or '')
 `;
 
 const ACQUIRE = `${READ}
@@ -39,16 +40,30 @@ return 0
 `;
 
 const FAILURE = `${READ}
-local now = tonumber(ARGV[1]); local threshold = tonumber(ARGV[2])
-failures = failures + 1
-if status == 'HALF_OPEN' or failures >= threshold then
+local now = tonumber(ARGV[1]); local threshold = tonumber(ARGV[2]); local windowMs = tonumber(ARGV[3])
+if status == 'CLOSED' then
+  if (not windowStartedAt) or now - windowStartedAt >= windowMs then
+    failures = 1; windowStartedAt = now
+  else
+    failures = failures + 1
+  end
+else
+  failures = failures + 1
+end
+if status ~= 'CLOSED' or failures >= threshold then
+  redis.call('HDEL', KEYS[1], 'windowStartedAt')
   redis.call('HSET', KEYS[1], 'status', 'OPEN', 'failures', failures, 'openedAt', now, 'inflight', 0)
   redis.call('EXPIRE', KEYS[1], 86400)
   return 'OPEN'
 end
-redis.call('HSET', KEYS[1], 'status', status, 'failures', failures)
+redis.call('HSET', KEYS[1], 'status', status, 'failures', failures, 'windowStartedAt', windowStartedAt)
 redis.call('EXPIRE', KEYS[1], 86400)
 return status
+`;
+
+const SUCCESS = `${READ}
+if status ~= 'CLOSED' then redis.call('DEL', KEYS[1]) end
+return 'CLOSED'
 `;
 
 /** Shared circuit state so every dispatcher instance and the router agree on provider health. */
@@ -67,7 +82,8 @@ export class RedisCircuitStore implements CircuitStore {
     if (!h.status) return { ...INITIAL_CIRCUIT };
     return {
       status: h.status as CircuitStatus,
-      consecutiveFailures: Number(h.failures ?? 0),
+      failures: Number(h.failures ?? 0),
+      windowStartedAt: h.windowStartedAt ? Number(h.windowStartedAt) : null,
       openedAt: h.openedAt ? Number(h.openedAt) : null,
       halfOpenInFlight: Number(h.inflight ?? 0),
     };
@@ -87,8 +103,7 @@ export class RedisCircuitStore implements CircuitStore {
   }
 
   async onSuccess(provider: string): Promise<CircuitStatus> {
-    await this.redis.del(this.key(provider));
-    return 'CLOSED';
+    return (await this.redis.eval(SUCCESS, 1, this.key(provider))) as CircuitStatus;
   }
 
   async onFailure(provider: string, now: number, cfg: CircuitConfig): Promise<CircuitStatus> {
@@ -98,6 +113,7 @@ export class RedisCircuitStore implements CircuitStore {
       this.key(provider),
       now,
       cfg.failureThreshold,
+      cfg.failureWindowMs,
     )) as CircuitStatus;
   }
 

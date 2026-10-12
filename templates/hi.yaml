@@ -24,8 +24,8 @@ templates:
     long: "नमस्ते {{user.name}},\n\nहमें {{date depositedAt format='datetime'}} को {{mode}} के माध्यम से {{currency amount}} प्राप्त हुए। संदर्भ: {{referenceId}}।{{#if availableBalance}}\n\nआपका उपलब्ध शेष अब {{currency availableBalance}} है।{{/if}}"
   RISK-001:
     title: 'तत्काल: मार्जिन कॉल'
-    short: "तत्काल मार्जिन कॉल: आवश्यक {{currency marginRequired}}, उपलब्ध {{currency marginAvailable}}। स्क्वेयर-ऑफ से बचने के लिए {{date deadline format='datetime'}} तक फंड जोड़ें। -Zetheta"
-    long: "नमस्ते {{user.name}},\n\nआपके खाते पर मार्जिन कॉल जारी हुई है।\n\nआवश्यक मार्जिन: {{currency marginRequired}}\nउपलब्ध मार्जिन: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% उपयोग)\n\nकृपया {{date deadline format='datetime'}} से पहले फंड जोड़ें या पोज़िशन कम करें, अन्यथा पोज़िशन बिना सूचना के स्क्वेयर-ऑफ की जा सकती हैं।"
+    short: "तत्काल मार्जिन कॉल: आवश्यक {{currency requiredMargin}}, उपलब्ध {{currency currentMargin}}। स्क्वेयर-ऑफ से बचने के लिए {{date deadline format='datetime'}} तक फंड जोड़ें। -Zetheta"
+    long: "नमस्ते {{user.name}},\n\nआपके खाते पर मार्जिन कॉल जारी हुई है।\n\nआपके खाते में {{currency shortfallAmount}} की मार्जिन कमी है।\n\nआवश्यक मार्जिन: {{currency requiredMargin}}\nउपलब्ध मार्जिन: {{currency currentMargin}}\n\nकृपया {{date deadline format='datetime'}} से पहले फंड जोड़ें या पोज़िशन कम करें, अन्यथा पोज़िशन बिना सूचना के स्क्वेयर-ऑफ की जा सकती हैं।"
   RISK-002:
     title: 'तत्काल: मार्जिन की कमी {{currency shortfallAmount}}'
     short: "तत्काल: {{currency shortfallAmount}} की मार्जिन कमी। {{date deadline format='datetime'}} तक फंड जोड़ें, वरना पोज़िशन स्क्वेयर-ऑफ हो सकती हैं। -Zetheta"

@@ -45,28 +45,26 @@ export function smsInfo(text: string): SmsInfo {
   };
 }
 
-export function maxUnits(encoding: 'GSM-7' | 'UCS-2', maxSegments: number): number {
-  if (encoding === 'GSM-7') return maxSegments === 1 ? 160 : 153 * maxSegments;
-  return maxSegments === 1 ? 70 : 67 * maxSegments;
-}
-
-/** Truncates to the segment budget, never splitting a surrogate pair. */
-export function truncateSms(
-  text: string,
-  maxSegments: number,
-): { text: string; truncated: boolean } {
+/**
+ * Fits `text` into `limit` units (septets for GSM-7, UTF-16 units for UCS-2;
+ * PDF §A4.3: "SMS body must fit 160 chars"). Truncates with an ellipsis and keeps
+ * a trailing link intact; never splits a surrogate pair.
+ */
+export function truncateSms(text: string, limit: number): { text: string; truncated: boolean } {
   const info = smsInfo(text);
-  const limit = maxUnits(info.encoding, maxSegments);
   if (info.units <= limit) return { text, truncated: false };
-  const ellipsis = '...';
-  const budget = limit - ellipsis.length;
+  const cost = (s: string): number => smsInfo(s).units;
+  const link = /\s(https:\/\/\S+)$/.exec(text)?.[1];
+  const tail = link && cost(`... ${link}`) < limit ? `... ${link}` : '...';
+  const head = link && tail !== '...' ? text.slice(0, text.length - link.length) : text;
+  const budget = limit - cost(tail);
   let used = 0;
   let out = '';
-  for (const ch of text) {
-    const cost = info.encoding === 'GSM-7' ? (EXTENDED.has(ch) ? 2 : 1) : ch.length;
-    if (used + cost > budget) break;
+  for (const ch of head) {
+    const c = info.encoding === 'GSM-7' ? (EXTENDED.has(ch) ? 2 : 1) : ch.length;
+    if (used + c > budget) break;
     out += ch;
-    used += cost;
+    used += c;
   }
-  return { text: out.trimEnd() + ellipsis, truncated: true };
+  return { text: out.trimEnd() + tail, truncated: true };
 }

@@ -24,8 +24,8 @@ templates:
     long: "नमस्कार {{user.name}},\n\n{{date depositedAt format='datetime'}} रोजी {{mode}} द्वारे {{currency amount}} प्राप्त झाले. संदर्भ: {{referenceId}}.{{#if availableBalance}}\n\nतुमची उपलब्ध शिल्लक आता {{currency availableBalance}} आहे.{{/if}}"
   RISK-001:
     title: 'तातडीचे: मार्जिन कॉल'
-    short: "तातडीचा मार्जिन कॉल: आवश्यक {{currency marginRequired}}, उपलब्ध {{currency marginAvailable}}. स्क्वेअर-ऑफ टाळण्यासाठी {{date deadline format='datetime'}} पर्यंत निधी जोडा. -Zetheta"
-    long: "नमस्कार {{user.name}},\n\nतुमच्या खात्यावर मार्जिन कॉल आला आहे.\n\nआवश्यक मार्जिन: {{currency marginRequired}}\nउपलब्ध मार्जिन: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% वापर)\n\nकृपया {{date deadline format='datetime'}} पूर्वी निधी जोडा किंवा पोझिशन कमी करा, अन्यथा पोझिशन पूर्वसूचनेशिवाय स्क्वेअर-ऑफ केल्या जाऊ शकतात."
+    short: "तातडीचा मार्जिन कॉल: आवश्यक {{currency requiredMargin}}, उपलब्ध {{currency currentMargin}}. स्क्वेअर-ऑफ टाळण्यासाठी {{date deadline format='datetime'}} पर्यंत निधी जोडा. -Zetheta"
+    long: "नमस्कार {{user.name}},\n\nतुमच्या खात्यावर मार्जिन कॉल आला आहे.\n\nतुमच्या खात्यात {{currency shortfallAmount}} ची मार्जिन तूट आहे.\n\nआवश्यक मार्जिन: {{currency requiredMargin}}\nउपलब्ध मार्जिन: {{currency currentMargin}}\n\nकृपया {{date deadline format='datetime'}} पूर्वी निधी जोडा किंवा पोझिशन कमी करा, अन्यथा पोझिशन पूर्वसूचनेशिवाय स्क्वेअर-ऑफ केल्या जाऊ शकतात."
   RISK-002:
     title: 'तातडीचे: मार्जिन तूट {{currency shortfallAmount}}'
     short: "तातडीचे: {{currency shortfallAmount}} मार्जिन तूट. {{date deadline format='datetime'}} पर्यंत निधी जोडा, अन्यथा पोझिशन स्क्वेअर-ऑफ होऊ शकतात. -Zetheta"

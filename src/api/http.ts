@@ -1,6 +1,6 @@
 import { OpenAPIRegistry, type RouteConfig } from '@asteasolutions/zod-to-openapi';
 import express, { type NextFunction, type Request, type Response, type Router } from 'express';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { currentCorrelationId } from '../common/context';
 import {
   ForbiddenError,
@@ -53,6 +53,11 @@ export interface RouteDef<P extends z.ZodType, Q extends z.ZodType, B extends z.
   params?: P;
   query?: Q;
   body?: B;
+  /**
+   * Alternative request shape (PDF Appendix A contract). When `when(rawBody)` holds the
+   * body is parsed with `schema` and errors use the PDF envelope (res.locals.contract).
+   */
+  altBody?: { when: (raw: unknown) => boolean; schema: z.ZodType };
   /** Handler receives the raw Buffer body (webhooks verify signatures over raw bytes). */
   rawBody?: boolean;
   contentType?: string;
@@ -153,8 +158,11 @@ export class Api {
         if (!query.success)
           throw new ValidationError('Invalid query parameters', issues(query.error, 'query'));
         let body: unknown = req.body;
-        if (def.body && !def.rawBody) {
-          const parsed = def.body.safeParse(req.body ?? {});
+        const alt = def.altBody?.when(req.body) ? def.altBody.schema : undefined;
+        if (alt) res.locals.contract = 'pdf';
+        const bodySchema = alt ?? def.body;
+        if (bodySchema && !def.rawBody) {
+          const parsed = bodySchema.safeParse(req.body ?? {});
           if (!parsed.success)
             throw new ValidationError('Invalid request body', issues(parsed.error, 'body'));
           body = parsed.data;
@@ -255,7 +263,11 @@ export class Api {
     if (def.body)
       request.body = {
         required: true,
-        content: { [def.contentType ?? 'application/json']: { schema: def.body } },
+        content: {
+          [def.contentType ?? 'application/json']: {
+            schema: def.altBody ? z.union([def.body, def.altBody.schema]) : def.body,
+          },
+        },
       };
     const authNote =
       typeof def.auth === 'object'

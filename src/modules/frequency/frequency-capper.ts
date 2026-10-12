@@ -15,6 +15,8 @@ export interface CapRequest {
   channels: Channel[];
   /** Exempt events are counted but never blocked. */
   exempt: boolean;
+  /** Per-event cooldown override (seconds); defaults to the policy value. */
+  cooldownSeconds?: number;
   now: Date;
   /** Evaluate only; do not consume budget (policy dry-runs). */
   dryRun?: boolean;
@@ -27,8 +29,8 @@ export interface CapResult {
 
 export interface FrequencyCapper {
   checkAndConsume(req: CapRequest): Promise<CapResult>;
-  /** Records a cap hit and returns the number of hits in the suggestion window. */
-  recordCapHit(userId: string, eventRef: string, now: Date): Promise<number>;
+  /** Records a notified event; returns how many the user received in the digest-suggestion window. */
+  recordNotified(userId: string, eventRef: string, now: Date): Promise<number>;
   /** Current counts for diagnostics/API. */
   usage(userId: string, now: Date): Promise<Record<string, number>>;
 }
@@ -39,7 +41,7 @@ export interface FrequencyCapper {
  *   <prefix>{<userId>}:cat:<CATEGORY> ZSET per-category window
  *   <prefix>{<userId>}:ch:<channel>   ZSET per-channel window      (member = eventRef)
  *   <prefix>{<userId>}:cd:<subject>   STRING last-sent ms, PX = cooldown (self-expiring)
- *   <prefix>{<userId>}:hits           ZSET cap hits for digest suggestions
+ *   <prefix>{<userId>}:notified       ZSET notified events for digest suggestions
  * Every ZSET is trimmed to its window on access and given a PEXPIRE equal to the
  * window, so idle users' keys expire automatically (explicit reset behaviour).
  */
@@ -153,7 +155,7 @@ export class RedisFrequencyCapper implements FrequencyCapper {
       this.cfg.global.windowSeconds * 1000,
       this.cfg.category.limit,
       this.cfg.category.windowSeconds * 1000,
-      this.cfg.sameEventCooldownSeconds * 1000,
+      (req.cooldownSeconds ?? this.cfg.sameEventCooldownSeconds) * 1000,
       channels.length,
       req.dryRun ? '0' : '1',
     ];
@@ -168,11 +170,11 @@ export class RedisFrequencyCapper implements FrequencyCapper {
     return interpret(raw, channels, uncounted);
   }
 
-  async recordCapHit(userId: string, eventRef: string, now: Date): Promise<number> {
+  async recordNotified(userId: string, eventRef: string, now: Date): Promise<number> {
     const n = await this.redis.eval(
       HIT_SCRIPT,
       1,
-      this.key(userId, 'hits'),
+      this.key(userId, 'notified'),
       now.getTime(),
       eventRef,
       this.cfg.digestSuggestion.windowSeconds * 1000,
@@ -251,7 +253,7 @@ export class InMemoryFrequencyCapper implements FrequencyCapper {
     }
     const cdKey = `${req.userId}:cd:${req.cooldownSubject}`;
     const cd = this.cooldowns.get(cdKey);
-    const cooldownMs = this.cfg.sameEventCooldownSeconds * 1000;
+    const cooldownMs = (req.cooldownSeconds ?? this.cfg.sameEventCooldownSeconds) * 1000;
     let eventBlock = '';
     if (!req.exempt) {
       if (cooldownMs > 0 && cd && cd.expires > now && now - cd.at < cooldownMs)
@@ -281,9 +283,9 @@ export class InMemoryFrequencyCapper implements FrequencyCapper {
     );
   }
 
-  recordCapHit(userId: string, eventRef: string, now: Date): Promise<number> {
+  recordNotified(userId: string, eventRef: string, now: Date): Promise<number> {
     const z = this.trim(
-      `${userId}:hits`,
+      `${userId}:notified`,
       now.getTime(),
       this.cfg.digestSuggestion.windowSeconds * 1000,
     );

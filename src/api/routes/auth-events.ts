@@ -4,6 +4,13 @@ import { NotFoundError } from '../../common/errors';
 import { eventEnvelopeSchema } from '../../modules/events/ingestion';
 import type { Api } from '../http';
 import { camel, toNotificationDto } from '../mappers';
+import {
+  camelKeys,
+  isPdfEnvelope,
+  pdfChannel,
+  pdfEventEnvelopeSchema,
+  type PdfEventEnvelope,
+} from '../pdf-contract';
 import { NotificationSchema, PolicyDecisionSchema, UuidParam } from '../schemas';
 
 const EventEnvelopeSchema = eventEnvelopeSchema.meta({ id: 'EventEnvelope' });
@@ -45,6 +52,18 @@ const IngestResponse = z
     statusUrl: z.string(),
   })
   .meta({ id: 'IngestResponse' });
+
+const PdfIngestResponse = z
+  .object({
+    notification_id: z.uuid(),
+    event_id: z.string(),
+    status: z.enum(['CREATED', 'DUPLICATE']),
+    channels_targeted: z.array(z.string()),
+    estimated_delivery_ms: z.number(),
+    created_at: z.string(),
+    status_url: z.string(),
+  })
+  .meta({ id: 'PdfIngestResponse' });
 
 const BatchResponse = z
   .object({
@@ -218,17 +237,52 @@ export function registerAuthAndEventRoutes(api: Api, c: Container): void {
     operationId: 'ingestEvent',
     summary: 'Submit a financial event for asynchronous processing',
     description:
-      'Validates the envelope and payload against the taxonomy, de-duplicates by (source, idempotencyKey) and publishes the event via the transactional outbox. Returns 202 for new events and 200 for exact duplicates; 409 if the key was used with a different payload.',
+      'Validates the envelope and payload against the taxonomy, de-duplicates by (source, idempotencyKey) and publishes the event via the transactional outbox. Returns 202 for new events and 200 for exact duplicates; 409 if the key was used with a different payload.\n\nAlso accepts the PDF Appendix A snake_case envelope (`event_type`, `event_id`, `source_system`, `timestamp`, `priority`, `user_id`, `payload`, `idempotency_key`); such requests are answered in the Appendix A shape, with `VALIDATION_FAILED` (422) errors. `notification_id` is the id of the notification request (one per event); per-channel notifications are listed at `status_url`.',
     tags: ['Events'],
     auth: { permission: 'events:ingest' },
     body: EventEnvelopeSchema,
+    altBody: { when: isPdfEnvelope, schema: pdfEventEnvelopeSchema },
     responses: {
-      202: { description: 'Accepted for processing', schema: IngestResponse },
-      200: { description: 'Duplicate of an earlier event', schema: IngestResponse },
+      202: {
+        description: 'Accepted for processing',
+        schema: z.union([IngestResponse, PdfIngestResponse]),
+      },
+      200: {
+        description: 'Duplicate of an earlier event',
+        schema: z.union([IngestResponse, PdfIngestResponse]),
+      },
       409: { description: 'Idempotency key reused with a different payload' },
       422: { description: 'Unknown event type or payload schema violation' },
     },
-    handler: async ({ body, actor, correlationId }) => {
+    handler: async ({ body, actor, correlationId, req }) => {
+      if (isPdfEnvelope(req.body)) {
+        const b = body as unknown as PdfEventEnvelope;
+        const r = await c.ingestion().ingest(
+          {
+            eventType: b.event_type,
+            userId: b.user_id,
+            occurredAt: b.timestamp,
+            idempotencyKey: b.idempotency_key ?? b.event_id,
+            payload: camelKeys(b.payload) as Record<string, unknown>,
+          },
+          `${actor.username}/${b.source_system}`,
+          correlationId,
+        );
+        const def = c.taxonomy.get(b.event_type);
+        return {
+          status: r.status === 'ACCEPTED' ? 202 : 200,
+          body: {
+            notification_id: r.eventId,
+            event_id: b.event_id,
+            status: r.status === 'ACCEPTED' ? 'CREATED' : 'DUPLICATE',
+            channels_targeted: (def?.defaultChannels ?? []).map(pdfChannel),
+            estimated_delivery_ms: def?.latencyObjectiveMs ?? 0,
+            created_at: c.clock.now().toISOString(),
+            status_url: `/api/v1/events/${r.eventId}`,
+          },
+          headers: { location: `/api/v1/events/${r.eventId}` },
+        };
+      }
       const r = await c.ingestion().ingest(body, actor.username, correlationId);
       return {
         status: r.status === 'ACCEPTED' ? 202 : 200,

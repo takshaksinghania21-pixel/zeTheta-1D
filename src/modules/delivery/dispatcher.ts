@@ -9,16 +9,18 @@ import { scrubString } from '../../common/pii';
 import type { RateLimiter } from '../../common/rate-limiter';
 import type { NotificationPolicy } from '../../config/policy';
 import { enqueueOutbox } from '../../infrastructure/outbox/outbox';
-import { RETRY_BAND_HEADER, type RabbitTopology } from '../../infrastructure/rabbitmq/rabbitmq';
+import type { RabbitTopology } from '../../infrastructure/rabbitmq/rabbitmq';
 import { evaluateConsent, latestConsents } from '../compliance/consent';
 import { decision, type PolicyDecision } from '../compliance/decisions';
+import { evaluateDnd, type DndService } from '../compliance/dnd';
 import type { PolicyDecisionRepository } from '../compliance/repository';
 import type { DeadLetterRepository } from '../dlq/repository';
 import type { NotificationFactory } from '../notifications/factory';
 import type { NotificationLifecycle } from '../notifications/lifecycle';
 import type { NotificationRepository } from '../notifications/repository';
 import type { DeliveryMessage, NotificationRow } from '../notifications/types';
-import { canRetry, computeRetryDelay, retryBand } from '../retries/backoff';
+import { canRetry, computeRetryDelay } from '../retries/backoff';
+import type { RedisRetryScheduler } from '../retries/retry-scheduler';
 import type { BudgetTracker } from '../routing/budget';
 import { evaluateQuietHours } from '../scheduling/quiet-hours';
 import type { EventDefinition, EventTaxonomy } from '../taxonomy/taxonomy';
@@ -54,6 +56,8 @@ export interface DispatcherDeps {
   users: UserRepository;
   userContext: UserContextService;
   decisions: PolicyDecisionRepository;
+  dnd: DndService;
+  retries: RedisRetryScheduler;
   dlq: DeadLetterRepository;
   budget: BudgetTracker;
   templates: TemplateEngine;
@@ -169,23 +173,27 @@ export class DeliveryDispatcher {
         completed_at: this.d.clock.now(),
       });
 
-    // Edge case: preferences/consent changed between routing and dispatch.
-    const block = await this.recheck(n, def);
+    // Edge case: preferences/consent/DND changed between routing and dispatch.
+    const { block, checked } = await this.recheck(n, def);
+    const decisionRow = (d: PolicyDecision) => ({
+      decision: d,
+      eventId: n.event_id,
+      notificationId: n.id,
+      userId: n.user_id,
+      correlationId: n.correlation_id,
+    });
     if (block) {
       await this.d.db.transaction(async (trx) => {
-        await this.d.lifecycle.transition(trx, n, 'SUPPRESSED', { ...ctx, reason: block.rule });
-        await this.d.decisions.insert(trx, [
-          {
-            decision: block,
-            eventId: n.event_id,
-            notificationId: n.id,
-            userId: n.user_id,
-            correlationId: n.correlation_id,
-          },
-        ]);
+        const to = block.rule.startsWith('DND_') ? 'DND' : 'SUPPRESSED';
+        await this.d.lifecycle.transition(trx, n, to, { ...ctx, reason: block.rule });
+        await this.d.decisions.insert(trx, [decisionRow(block)]);
       });
+      if (block.rule.startsWith('DND_'))
+        metrics.dndBlocks.inc({ classification: n.regulatory_class });
       return 'ack';
     }
+    // Audit proof that DND was checked immediately before this send (TRAI audit, PDF B2.3).
+    await this.d.decisions.insert(this.d.db, checked.map(decisionRow));
 
     let recipient = n.user_id;
     let contactId: string | null = null;
@@ -338,7 +346,7 @@ export class DeliveryDispatcher {
       metrics.providerRequests.inc({
         provider: entry.name,
         channel: n.channel,
-        outcome: 'success',
+        status: 'success',
       });
       metrics.providerDuration.observe({ provider: entry.name }, latency / 1000);
       return { ok: true, providerMessageId: res.providerMessageId, costMicros: res.costMicros };
@@ -366,7 +374,7 @@ export class DeliveryDispatcher {
       metrics.providerRequests.inc({
         provider: entry.name,
         channel: n.channel,
-        outcome: pe.kind.toLowerCase(),
+        status: pe.kind.toLowerCase(),
       });
       metrics.providerDuration.observe({ provider: entry.name }, latency / 1000);
       this.d.logger.warn(
@@ -417,7 +425,7 @@ export class DeliveryDispatcher {
       }
     });
     await this.d.budget.add(n.channel, costMicros, now).catch(() => undefined);
-    metrics.deliveryLatency.observe(
+    metrics.sendLatency.observe(
       { channel: n.channel, priority: n.priority },
       (now.getTime() - new Date(n.created_at).getTime()) / 1000,
     );
@@ -426,33 +434,58 @@ export class DeliveryDispatcher {
   private async recheck(
     n: NotificationRow,
     def: EventDefinition | undefined,
-  ): Promise<PolicyDecision | null> {
-    if (!def || n.is_digest) return null;
-    const ctx = await this.d.userContext.load(n.user_id);
+  ): Promise<{ block: PolicyDecision | null; checked: PolicyDecision[] }> {
+    if (!def || n.is_digest) return { block: null, checked: [] };
+    const ctx = await this.d.userContext.load(n.user_id, { fresh: true });
     if (ctx.user.status !== 'ACTIVE')
-      return decision(
-        n.channel,
-        'USER_INACTIVE',
-        'BLOCK',
-        `User became ${ctx.user.status} before dispatch`,
-      );
+      return {
+        block: decision(
+          n.channel,
+          'USER_INACTIVE',
+          'BLOCK',
+          `User became ${ctx.user.status} before dispatch`,
+        ),
+        checked: [],
+      };
     if (!n.via_override && n.parent_notification_id === null) {
       const prefs = ctx.preferences;
       if (!prefs.channels[n.channel] || !prefs.categories[def.category].enabled) {
-        return decision(
-          n.channel,
-          'PREFERENCE_CHANGED_BEFORE_DISPATCH',
-          'BLOCK',
-          `User disabled ${n.channel}/${def.category} after routing (preference v${n.preference_version ?? '?'} → v${ctx.preferenceVersion})`,
-          {
-            routedWithVersion: n.preference_version,
-            currentVersion: ctx.preferenceVersion,
-          },
-        );
+        return {
+          block: decision(
+            n.channel,
+            'PREFERENCE_CHANGED_BEFORE_DISPATCH',
+            'BLOCK',
+            `User disabled ${n.channel}/${def.category} after routing (preference v${n.preference_version ?? '?'} → v${ctx.preferenceVersion})`,
+            {
+              routedWithVersion: n.preference_version,
+              currentVersion: ctx.preferenceVersion,
+            },
+          ),
+          checked: [],
+        };
       }
     }
     const consent = evaluateConsent(n.channel, def.regulatoryClass, latestConsents(ctx.consents));
-    return consent.outcome === 'BLOCK' ? consent : null;
+    if (consent.outcome === 'BLOCK') return { block: consent, checked: [] };
+    // TRAI: the DND check is the LAST step before an SMS leaves (PDF p.46), so a
+    // number registered after routing (deferral, retry, backlog) is still honoured.
+    if (!this.d.policy.dnd.appliesToChannels.includes(n.channel))
+      return { block: null, checked: [] };
+    const phoneHash = ctx.contacts.find(
+      (c) => c.channel === n.channel && c.status === 'ACTIVE',
+    )?.phoneHash;
+    const dnd = evaluateDnd(
+      phoneHash ? await this.d.dnd.lookup(phoneHash) : null,
+      def.regulatoryClass,
+      n.channel,
+      this.d.policy.dnd,
+    );
+    dnd.metadata = {
+      ...dnd.metadata,
+      stage: 'DISPATCH',
+      checkedAt: this.d.clock.now().toISOString(),
+    };
+    return dnd.outcome === 'BLOCK' ? { block: dnd, checked: [] } : { block: null, checked: [dnd] };
   }
 
   private async permanentFailure(
@@ -514,29 +547,18 @@ export class DeliveryDispatcher {
           metadata: { retry, delayMs: delay, attempts: summary },
           patch: { ...errorPatch, retry_count: retry, next_attempt_at: nextAt },
         });
-        const message: DeliveryMessage = {
-          notificationId: n.id,
-          createdAt: new Date(n.created_at).toISOString(),
-          retry,
-          correlationId: n.correlation_id,
-        };
-        await enqueueOutbox(trx, [
-          {
-            destination: 'RABBITMQ',
-            exchange: this.d.topology.retryExchange,
-            routingKey: n.channel,
-            payload: message,
-            expirationMs: delay,
-            priority: this.d.policy.queuePriority[n.priority],
-            messageId: `${n.id}:${retry}`,
-            headers: {
-              [RETRY_BAND_HEADER]: String(retryBand(delay)),
-              'x-correlation-id': n.correlation_id,
-            },
-          },
-        ]);
       });
-      metrics.retries.inc({ channel: n.channel });
+      // After commit: if this ZADD is lost, the stale sweep re-enqueues from next_attempt_at.
+      await this.d.retries.schedule(n, retry, nextAt).catch((err: unknown) => {
+        this.d.logger.warn(
+          { err: errorMessage(err), notificationId: n.id },
+          'retry not added to Redis schedule; sweep will recover it',
+        );
+      });
+      metrics.retries.inc({
+        attempt: String(retry),
+        provider: summary.at(-1)?.provider ?? n.provider ?? 'none',
+      });
       return;
     }
     await this.d.db.transaction(async (trx) => {

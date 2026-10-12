@@ -13,7 +13,7 @@ import {
   circuitAcquire,
   INITIAL_CIRCUIT,
 } from '../../src/modules/delivery/circuit-breaker';
-import { canRetry, computeRetryDelay, retryBand } from '../../src/modules/retries/backoff';
+import { canRetry, computeRetryDelay } from '../../src/modules/retries/backoff';
 
 const policy = loadPolicy();
 
@@ -72,20 +72,17 @@ describe('retry backoff', () => {
     expect(canRetry(5, policy.retryProfiles.HIGH)).toBe(false);
     expect(canRetry(10, policy.retryProfiles.CRITICAL)).toBe(false);
   });
-
-  it('maps delays to bounded power-of-two retry bands', () => {
-    expect(retryBand(100)).toBe(9);
-    expect(retryBand(1500)).toBe(10);
-    expect(retryBand(60000)).toBe(15);
-    expect(retryBand(7200000)).toBe(22);
-    expect(retryBand(10 ** 9)).toBe(23);
-  });
 });
 
 describe('circuit breaker', () => {
-  const cfg = { failureThreshold: 3, openDurationMs: 1000, halfOpenMaxTrials: 1 };
+  const cfg = {
+    failureThreshold: 3,
+    failureWindowMs: 60000,
+    openDurationMs: 1000,
+    halfOpenMaxTrials: 1,
+  };
 
-  it('opens after consecutive failures, half-opens after the cool-down and closes on success', async () => {
+  it('opens after threshold failures in the window, half-opens after the cool-down and closes on success', async () => {
     let now = 0;
     const cb = new CircuitBreaker(new InMemoryCircuitStore(), cfg, () => now);
     for (let i = 0; i < 3; i++) await cb.recordFailure('p');
@@ -112,13 +109,36 @@ describe('circuit breaker', () => {
     expect(s.openedAt).toBe(1500);
   });
 
-  it('resets the failure count on success while closed', async () => {
+  it('counts failures in the window even when successes interleave (failure rate, not streak)', async () => {
     const cb = new CircuitBreaker(new InMemoryCircuitStore(), cfg, () => 0);
     await cb.recordFailure('p');
     await cb.recordFailure('p');
     await cb.recordSuccess('p');
     await cb.recordFailure('p');
-    expect((await cb.state('p')).status).toBe('CLOSED');
+    expect((await cb.state('p')).status).toBe('OPEN');
+  });
+
+  it('starts a new window once failureWindowMs has passed (PDF: 5 failures in 60 s)', async () => {
+    let now = 0;
+    const cb = new CircuitBreaker(new InMemoryCircuitStore(), cfg, () => now);
+    await cb.recordFailure('p');
+    await cb.recordFailure('p');
+    now = 60000;
+    await cb.recordFailure('p');
+    expect(await cb.state('p')).toMatchObject({
+      status: 'CLOSED',
+      failures: 1,
+      windowStartedAt: 60000,
+    });
+  });
+
+  it('uses the Appendix B thresholds in the shipped policy', () => {
+    expect(policy.circuitBreaker).toMatchObject({
+      failureThreshold: 5,
+      failureWindowMs: 60000,
+      openDurationMs: 60000,
+      halfOpenMaxTrials: 1,
+    });
   });
 
   it('admits a new trial if a half-open trial never reported back', () => {

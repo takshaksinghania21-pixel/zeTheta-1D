@@ -44,6 +44,7 @@ import { NotificationFactory } from './modules/notifications/factory';
 import { NotificationLifecycle } from './modules/notifications/lifecycle';
 import { NotificationRepository } from './modules/notifications/repository';
 import { NotificationService } from './modules/notifications/service';
+import { RedisRetryScheduler } from './modules/retries/retry-scheduler';
 import { RedisBudgetTracker, type BudgetTracker } from './modules/routing/budget';
 import { RoutingEngine } from './modules/routing/routing-engine';
 import { Scheduler } from './modules/scheduling/scheduler';
@@ -160,7 +161,7 @@ export class Container {
 
   // --- repositories ------------------------------------------------------------
   readonly users = lazy(
-    () => new UserRepository(this.db(), this.encryptor(), this.config.DATA_HASH_KEY),
+    () => new UserRepository(this.db(), this.encryptor(), this.config.DATA_HASH_KEY, this.redis()),
   );
   readonly consents = lazy(() => new ConsentRepository(this.db()));
   readonly notifications = lazy(() => new NotificationRepository(this.db()));
@@ -179,7 +180,7 @@ export class Container {
     () =>
       new TemplateEngine(this.templateRepo(), {
         fallbackLocale: this.policy.templates.fallbackLocale,
-        smsMaxSegments: this.policy.templates.smsMaxSegments,
+        smsMaxChars: this.policy.templates.smsMaxChars,
       }),
   );
   readonly userContext = lazy(
@@ -237,7 +238,7 @@ export class Container {
       ),
   );
   readonly ingestion = lazy(
-    () => new EventIngestionService(this.db(), this.taxonomy, this.topics.financialEvents),
+    () => new EventIngestionService(this.db(), this.taxonomy, (t) => this.eventTopic(t)),
   );
   readonly processor = lazy(
     () =>
@@ -271,6 +272,8 @@ export class Container {
         users: this.users(),
         userContext: this.userContext(),
         decisions: this.decisions(),
+        dnd: this.dnd(),
+        retries: this.retryScheduler(),
         dlq: this.dlqRepo(),
         budget: this.budget(),
         templates: this.templates(),
@@ -316,10 +319,27 @@ export class Container {
         this.lifecycle(),
         this.factory(),
         this.audit(),
-        this.topics.financialEvents,
+        (t) => this.eventTopic(t),
       ),
   );
   readonly analytics = lazy(() => new AnalyticsService(this.db()));
+  readonly retryScheduler = lazy(
+    () =>
+      new RedisRetryScheduler(
+        this.redis(),
+        this.db(),
+        this.factory(),
+        this.logger.child({ component: 'retry-scheduler' }),
+        `${this.config.RABBITMQ_PREFIX}retry:schedule`,
+      ),
+  );
+
+  /** CRITICAL events go to the dedicated critical topic (PDF §C4.3, Appendix B). */
+  eventTopic(eventType: string): string {
+    return this.taxonomy.get(eventType)?.priority === 'CRITICAL'
+      ? this.topics.critical
+      : this.topics.events;
+  }
 
   private relayPromise: Promise<OutboxRelay> | undefined;
   async outboxRelay(): Promise<OutboxRelay> {

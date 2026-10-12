@@ -109,25 +109,33 @@ export class Scheduler {
       if (logicalEvents.size > this.d.policy.quietHours.morningDigestThreshold) {
         await this.foldIntoDigest(trx, userId, rows, 'QUIET_HOURS_MORNING_DIGEST');
       } else {
+        // Caps count logical events, so one event's channels are checked together.
+        const byEvent = new Map<string, NotificationRow[]>();
         for (const n of rows) {
-          const def = this.d.taxonomy.get(n.event_type);
+          const key = n.event_id ?? n.id;
+          byEvent.set(key, [...(byEvent.get(key) ?? []), n]);
+        }
+        for (const [eventRef, group] of byEvent) {
+          const def = this.d.taxonomy.get(group[0]?.event_type ?? '');
           const cap = await this.d.capper.checkAndConsume({
             userId,
-            eventRef: n.id,
+            eventRef,
             category: def?.category ?? 'MARKET',
-            cooldownSubject: `release:${n.id}`,
-            channels: [n.channel],
+            cooldownSubject: `release:${eventRef}`,
+            channels: group.map((n) => n.channel),
             exempt: def?.frequencyCapExempt ?? false,
             now: this.d.clock.now(),
           });
-          const ctx = { actor: ACTOR, correlationId: n.correlation_id };
-          if (cap.allowedChannels.includes(n.channel))
-            await this.d.factory.queue(trx, n, { ...ctx, reason: 'QUIET_HOURS_ENDED' });
-          else
-            await this.d.lifecycle.transition(trx, n, 'CAPPED', {
-              ...ctx,
-              reason: `FREQUENCY_CAP_${cap.blocked[0]?.scope ?? 'CHANNEL'}`,
-            });
+          for (const n of group) {
+            const ctx = { actor: ACTOR, correlationId: n.correlation_id };
+            if (cap.allowedChannels.includes(n.channel))
+              await this.d.factory.queue(trx, n, { ...ctx, reason: 'QUIET_HOURS_ENDED' });
+            else
+              await this.d.lifecycle.transition(trx, n, 'CAPPED', {
+                ...ctx,
+                reason: `FREQUENCY_CAP_${cap.blocked.find((b) => b.channel === n.channel)?.scope ?? cap.blocked[0]?.scope ?? 'CHANNEL'}`,
+              });
+          }
         }
       }
       await this.complete(

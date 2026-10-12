@@ -96,6 +96,7 @@ export class EventProcessor {
             data: payload,
             user: { name: ctx.user.display_name },
             requiredFields,
+            abSubject: event.user_id,
           }),
         );
       } catch (err) {
@@ -104,14 +105,20 @@ export class EventProcessor {
       }
     }
 
-    if (plan.capHit) {
-      const hits = await this.d.capper.recordCapHit(event.user_id, event.id, this.d.clock.now());
-      if (hits >= this.d.policy.frequencyCaps.digestSuggestion.capHitThreshold) {
+    // PDF §A6.2: more than 8 notifications/day over a rolling 7 days → suggest a digest.
+    if (plan.plans.some((p) => p.action === 'QUEUE' && p.channel !== 'inapp')) {
+      const { dailyThreshold, windowSeconds } = this.d.policy.frequencyCaps.digestSuggestion;
+      const n = await this.d.capper.recordNotified(event.user_id, event.id, this.d.clock.now());
+      if (n > dailyThreshold * (windowSeconds / 86400)) {
         await this.d
           .db('digest_suggestions')
-          .insert({ user_id: event.user_id, cap_hits: hits, suggested_at: this.d.clock.now() })
+          .insert({
+            user_id: event.user_id,
+            notifications_in_window: n,
+            suggested_at: this.d.clock.now(),
+          })
           .onConflict('user_id')
-          .merge({ cap_hits: hits, suggested_at: this.d.clock.now() });
+          .merge({ notifications_in_window: n, suggested_at: this.d.clock.now() });
       }
     }
 
@@ -143,6 +150,17 @@ export class EventProcessor {
           correlationId: event.correlation_id,
         })),
       );
+      // Saga escalation (PDF §A1.2): no mandatory channel is reachable → manual call queue.
+      const undeliverable = plan.decisions.find((d) => d.rule === 'MANDATORY_UNDELIVERABLE');
+      if (undeliverable)
+        await this.d.dlq.insert(trx, {
+          source: 'EVENT',
+          eventId: event.id,
+          reasonCode: 'ESCALATE_MANUAL_CALL',
+          reasonMessage: `${def.code}: no mandatory channel (${def.mandatoryChannels.join(', ')}) is reachable; contact the user manually`,
+          attempts: 0,
+          payload: { eventType: def.code, userId: event.user_id, priority: def.priority },
+        });
       await trx('financial_events')
         .where({ id: event.id })
         .update({
@@ -243,7 +261,8 @@ export class EventProcessor {
           reason: p.reason ?? 'FREQUENCY_CAP',
         });
         metrics.capHits.inc({
-          scope: (p.reason ?? 'FREQUENCY_CAP').replace('FREQUENCY_', '').toLowerCase(),
+          cap_type: (p.reason ?? 'FREQUENCY_CAP').replace('FREQUENCY_', '').toLowerCase(),
+          event_type: n.event_type,
         });
         break;
       case 'DEFER':

@@ -94,7 +94,7 @@ export async function waitFor<T>(
   let v = await fn();
   while (!done(v)) {
     if (Date.now() > deadline)
-      throw new Error(`waitFor timed out; last value: ${JSON.stringify(v).slice(0, 500)}`);
+      throw new Error(`waitFor timed out; last value: ${JSON.stringify(v).slice(0, 4000)}`);
     await new Promise((r) => setTimeout(r, intervalMs));
     v = await fn();
   }

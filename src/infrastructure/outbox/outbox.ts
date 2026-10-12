@@ -19,7 +19,6 @@ export interface RabbitOutboxMessage {
   payload: unknown;
   headers?: Record<string, string>;
   priority?: number;
-  expirationMs?: number;
   messageId?: string;
 }
 
@@ -49,7 +48,6 @@ export async function enqueueOutbox(
             payload: JSON.stringify(m.payload),
             headers: JSON.stringify(m.headers ?? {}),
             priority: m.priority ?? null,
-            expiration_ms: m.expirationMs ?? null,
           },
     ),
   );
@@ -64,7 +62,6 @@ interface OutboxRow {
   payload: unknown;
   headers: Record<string, string>;
   priority: number | null;
-  expiration_ms: number | null;
   attempts: number;
 }
 
@@ -175,7 +172,6 @@ export class OutboxRelay {
               {
                 headers: r.headers,
                 ...(r.priority !== null ? { priority: r.priority } : {}),
-                ...(r.expiration_ms !== null ? { expiration: String(r.expiration_ms) } : {}),
                 ...(r.message_key ? { messageId: r.message_key } : {}),
                 ...(r.headers['x-correlation-id']
                   ? { correlationId: r.headers['x-correlation-id'] }

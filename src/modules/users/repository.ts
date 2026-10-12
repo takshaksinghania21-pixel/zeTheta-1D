@@ -1,3 +1,4 @@
+import type { Redis } from 'ioredis';
 import type { Knex } from 'knex';
 import { blindIndex, type FieldEncryptor } from '../../common/crypto';
 import { ConflictError, NotFoundError } from '../../common/errors';
@@ -7,6 +8,13 @@ import type { ContactSummary } from '../routing/routing-engine';
 import type { UserPreferences } from '../preferences/types';
 import { normaliseContact, type ContactChannel } from './contacts';
 
+const PREFS_CACHE_TTL_SECONDS = 60;
+const prefsKey = (userId: string): string => `prefs:${userId}`;
+const SET_IF_NEWER = `
+local cur = redis.call('GET', KEYS[1])
+if cur and cjson.decode(cur).version >= tonumber(ARGV[2]) then return 0 end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[3]))
+return 1`;
 export interface UserRow {
   id: string;
   external_ref: string | null;
@@ -56,6 +64,8 @@ export class UserRepository {
     private readonly db: Knex,
     private readonly encryptor: FieldEncryptor,
     private readonly hashKey: string,
+    /** Preference cache (PDF Day 5); optional so tooling can run without Redis. */
+    private readonly cache?: Redis,
   ) {}
 
   hashContact(channel: ContactChannel, value: string): string {
@@ -190,14 +200,51 @@ export class UserRepository {
     return { id: row.id, value: this.encryptor.decrypt(row.value_ciphertext) };
   }
 
+  /** `fresh` bypasses the cache (dispatch-time re-checks must see the latest choice). */
   async getPreferences(
     userId: string,
+    options: { fresh?: boolean } = {},
   ): Promise<{ version: number; preferences: UserPreferences; updatedAt: Date }> {
+    if (this.cache && !options.fresh) {
+      const hit = await this.cache.get(prefsKey(userId)).catch(() => null);
+      if (hit) {
+        const v = JSON.parse(hit) as {
+          version: number;
+          preferences: UserPreferences;
+          updatedAt: string;
+        };
+        return { ...v, updatedAt: new Date(v.updatedAt) };
+      }
+    }
     const row = (await this.db('user_preferences').where({ user_id: userId }).first()) as
       | { version: number; preferences: UserPreferences; updated_at: Date }
       | undefined;
     if (!row) return { version: 0, preferences: {}, updatedAt: new Date(0) };
-    return { version: row.version, preferences: row.preferences, updatedAt: row.updated_at };
+    const out = { version: row.version, preferences: row.preferences, updatedAt: row.updated_at };
+    await this.cachePreferences(userId, out);
+    return out;
+  }
+
+  /** Versioned write: an older value never replaces a newer one (no stale re-population). */
+  private async cachePreferences(
+    userId: string,
+    v: { version: number; preferences: UserPreferences; updatedAt: Date },
+  ): Promise<boolean> {
+    if (!this.cache) return false;
+    try {
+      await this.cache.eval(
+        SET_IF_NEWER,
+        1,
+        prefsKey(userId),
+        JSON.stringify(v),
+        v.version,
+        PREFS_CACHE_TTL_SECONDS,
+      );
+      return true;
+    } catch {
+      await this.cache.del(prefsKey(userId)).catch(() => undefined);
+      return false;
+    }
   }
 
   /**
@@ -209,8 +256,14 @@ export class UserRepository {
     mutate: (current: UserPreferences) => UserPreferences,
     actor: string,
     expectedVersion?: number,
-  ): Promise<{ version: number; preferences: UserPreferences; previous: UserPreferences }> {
-    return this.db.transaction(async (trx) => {
+  ): Promise<{
+    version: number;
+    preferences: UserPreferences;
+    previous: UserPreferences;
+    updatedAt: Date;
+    cacheInvalidated: boolean;
+  }> {
+    const res = await this.db.transaction(async (trx) => {
       const row = (await trx('user_preferences').where({ user_id: userId }).forUpdate().first()) as
         | { version: number; preferences: UserPreferences }
         | undefined;
@@ -228,8 +281,15 @@ export class UserRepository {
           updated_at: trx.fn.now(),
           updated_by: actor,
         });
-      return { version, preferences: next, previous: row.preferences };
+      return { version, preferences: next, previous: row.preferences, updatedAt: new Date() };
     });
+    const { version, preferences, updatedAt } = res;
+    const cacheInvalidated = await this.cachePreferences(userId, {
+      version,
+      preferences,
+      updatedAt,
+    });
+    return { ...res, cacheInvalidated };
   }
 }
 

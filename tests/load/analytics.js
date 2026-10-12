@@ -1,5 +1,5 @@
 // k6: analytics/query latency under concurrent operators.
-// Usage: k6 run -e BASE_URL=... -e USERNAME=operator -e PASSWORD=... [-e VUS=10 -e DURATION=30s] load-tests/analytics.js
+// Usage: k6 run -e BASE_URL=... -e USERNAME=operator -e PASSWORD=... [-e VUS=10 -e DURATION=30s] tests/load/analytics.js
 import http from 'k6/http';
 import { check } from 'k6';
 

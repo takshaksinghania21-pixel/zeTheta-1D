@@ -10,8 +10,9 @@ const TRANSITIONS: Readonly<Record<NotificationState, readonly NotificationState
   ENRICHED: ['ROUTED', 'DND', 'SUPPRESSED', 'FAILED'],
   ROUTED: ['QUEUED', 'CAPPED', 'QUIET', 'DIGESTED', 'SUPPRESSED', 'FAILED'],
   QUIET: ['QUEUED', 'CAPPED', 'DIGESTED', 'SUPPRESSED', 'FAILED'],
-  QUEUED: ['SENT', 'DELIVERED', 'RETRYING', 'FAILED', 'DLQ', 'SUPPRESSED', 'BOUNCED'],
-  RETRYING: ['SENT', 'DELIVERED', 'RETRYING', 'FAILED', 'DLQ', 'SUPPRESSED', 'BOUNCED'],
+  // DND: re-checked at dispatch (TRAI requires the check immediately before sending).
+  QUEUED: ['SENT', 'DELIVERED', 'RETRYING', 'FAILED', 'DLQ', 'SUPPRESSED', 'BOUNCED', 'DND'],
+  RETRYING: ['SENT', 'DELIVERED', 'RETRYING', 'FAILED', 'DLQ', 'SUPPRESSED', 'BOUNCED', 'DND'],
   // Receipts can arrive out of order (e.g. WhatsApp "read" before "delivered").
   SENT: ['DELIVERED', 'READ', 'FAILED', 'BOUNCED'],
   DELIVERED: ['READ', 'BOUNCED'],

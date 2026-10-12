@@ -11,6 +11,8 @@ export interface TemplateRow {
   channel: Channel;
   locale: Locale;
   active_version: number | null;
+  experiment_version: number | null;
+  experiment_percent: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -28,9 +30,20 @@ export interface TemplateVersionRow {
   created_at: Date;
 }
 
+type Variants = {
+  active: ChannelTemplate | null;
+  experiment: ChannelTemplate | null;
+  percent: number;
+};
+
+/** Deterministic 0–99 bucket for (template, user): a user always sees the same variant. */
+export function abBucket(templateId: string, subject: string): number {
+  return parseInt(sha256Hex(`${templateId}:${subject}`).slice(0, 8), 16) % 100;
+}
+
 /** PostgreSQL-backed versioned templates with a short in-process cache. */
 export class TemplateRepository implements TemplateStore {
-  private readonly cache = new Map<string, { value: ChannelTemplate | null; expires: number }>();
+  private readonly cache = new Map<string, { value: Variants; expires: number }>();
 
   constructor(
     private readonly db: Knex,
@@ -41,35 +54,72 @@ export class TemplateRepository implements TemplateStore {
     eventType: string,
     channel: Channel,
     locale: Locale,
+    abSubject?: string,
   ): Promise<ChannelTemplate | null> {
     const key = `${eventType}|${channel}|${locale}`;
-    const hit = this.cache.get(key);
-    if (hit && hit.expires > Date.now()) return hit.value;
-    const row = (await this.db('templates as t')
-      .join('template_versions as v', function joinActive() {
-        this.on('v.template_id', '=', 't.id').andOn('v.version', '=', 't.active_version');
-      })
-      .where({ 't.event_type': eventType, 't.channel': channel, 't.locale': locale })
-      .first('t.id as template_id', 'v.version', 'v.subject', 'v.title', 'v.body')) as
-      | {
-          template_id: string;
-          version: number;
-          subject: string | null;
-          title: string | null;
-          body: string;
-        }
+    let hit = this.cache.get(key);
+    if (!hit || hit.expires <= Date.now()) {
+      hit = {
+        value: await this.loadVariants(eventType, channel, locale),
+        expires: Date.now() + this.cacheTtlMs,
+      };
+      this.cache.set(key, hit);
+    }
+    const { active, experiment, percent } = hit.value;
+    if (experiment?.templateId && abSubject && abBucket(experiment.templateId, abSubject) < percent)
+      return experiment;
+    return active;
+  }
+
+  private async loadVariants(
+    eventType: string,
+    channel: Channel,
+    locale: Locale,
+  ): Promise<Variants> {
+    const t = (await this.db('templates')
+      .where({ event_type: eventType, channel, locale })
+      .first('id', 'active_version', 'experiment_version', 'experiment_percent')) as
+      | Pick<TemplateRow, 'id' | 'active_version' | 'experiment_version' | 'experiment_percent'>
       | undefined;
-    const value: ChannelTemplate | null = row
-      ? {
-          templateId: row.template_id,
-          version: row.version,
-          subject: row.subject,
-          title: row.title,
-          body: row.body,
-        }
-      : null;
-    this.cache.set(key, { value, expires: Date.now() + this.cacheTtlMs });
-    return value;
+    if (!t) return { active: null, experiment: null, percent: 0 };
+    const versions = (await this.db('template_versions')
+      .where({ template_id: t.id })
+      .whereIn(
+        'version',
+        [t.active_version, t.experiment_version].filter((v) => v !== null),
+      )
+      .select('version', 'subject', 'title', 'body')) as Pick<
+      TemplateVersionRow,
+      'version' | 'subject' | 'title' | 'body'
+    >[];
+    const pick = (v: number | null): ChannelTemplate | null => {
+      const row = versions.find((x) => x.version === v);
+      return row ? { templateId: t.id, ...row } : null;
+    };
+    return {
+      active: pick(t.active_version),
+      experiment: t.experiment_percent > 0 ? pick(t.experiment_version) : null,
+      percent: t.experiment_percent,
+    };
+  }
+
+  /** Starts (percent > 0) or stops (percent 0) an A/B experiment for a template. */
+  async setExperiment(templateId: string, version: number | null, percent: number): Promise<void> {
+    if (version !== null) {
+      const v = (await this.db('template_versions')
+        .where({ template_id: templateId, version })
+        .first('status')) as { status: string } | undefined;
+      if (!v) throw new NotFoundError('Template version', `${templateId}@${version}`);
+    }
+    const n = await this.db('templates')
+      .where({ id: templateId })
+      .update({
+        experiment_version: percent > 0 ? version : null,
+        experiment_percent: percent > 0 ? percent : 0,
+        updated_at: this.db.fn.now(),
+      });
+    if (n === 0) throw new NotFoundError('Template', templateId);
+    this.invalidate();
   }
 
   invalidate(): void {

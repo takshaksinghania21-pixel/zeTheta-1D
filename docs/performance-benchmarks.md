@@ -57,7 +57,7 @@ synthetic overload**; they are met at steady low load (e2e tests deliver in
 ## Scenario 2 — analytics and operator query latency
 
 ```bash
-k6 run -e BASE_URL=http://localhost:3000 -e USERNAME=operator -e PASSWORD=… -e VUS=10 -e DURATION=30s load-tests/analytics.js
+k6 run -e BASE_URL=http://localhost:3000 -e USERNAME=operator -e PASSWORD=… -e VUS=10 -e DURATION=30s tests/load/analytics.js
 ```
 
 With ~42 000 notifications and ~130 000 history rows in the database:

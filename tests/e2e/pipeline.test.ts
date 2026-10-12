@@ -43,6 +43,7 @@ beforeAll(async () => {
   workers = await startWorkers(s.c, [
     'outbox-relay',
     'event-consumer',
+    'critical-consumer',
     'dispatcher',
     'dlq-ingest',
     'scheduler',
@@ -60,13 +61,9 @@ afterAll(async () => {
   await admin.deleteTopics({ topics: Object.values(s.c.topics) }).catch(() => undefined);
   await admin.disconnect();
   const ch = await (await s.c.rabbit().connect()).createChannel();
-  for (const q of [
-    ...CHANNELS.map((c) => s.c.topology.deliveryQueue(c)),
-    s.c.topology.dlqQueue,
-    ...Array.from({ length: 15 }, (_, i) => s.c.topology.retryQueue(i + 9)),
-  ])
+  for (const q of [...CHANNELS.map((c) => s.c.topology.deliveryQueue(c)), s.c.topology.dlqQueue])
     await ch.deleteQueue(q).catch(() => undefined);
-  for (const ex of [s.c.topology.deliveryExchange, s.c.topology.retryExchange, s.c.topology.dlx])
+  for (const ex of [s.c.topology.deliveryExchange, s.c.topology.dlx])
     await ch.deleteExchange(ex).catch(() => undefined);
   await ch.close().catch(() => undefined);
   await s.close();
@@ -116,7 +113,7 @@ describe('end-to-end notification pipeline', () => {
 
     const eventId = await submit(userId, 'TXNX-001', SAMPLE_PAYLOADS['TXNX-001']!);
     const ns = await waitFor(() => notificationsOf(eventId), settled(['DELIVERED']), 30000);
-    expect(ns.map((n) => n.channel).sort()).toEqual(['email', 'inapp', 'push']);
+    expect(ns.map((n) => n.channel).sort()).toEqual(['email', 'inapp', 'push', 'sms']);
     expect(received[0]?.title).toBe('Buy order executed: INFY');
 
     const inapp = ns.find((n) => n.channel === 'inapp')!;
@@ -125,7 +122,7 @@ describe('end-to-end notification pipeline', () => {
     const click = await api().post(`/api/v1/notifications/${inapp.id}/click`).set(auth(userToken));
     expect(click.body.clickedAt).not.toBeNull();
     const own = await api().get('/api/v1/notifications?unreadOnly=false').set(auth(userToken));
-    expect(own.body.items.length).toBe(3);
+    expect(own.body.items.length).toBe(4);
 
     const history = await api()
       .get(`/api/v1/notifications/${inapp.id}/history`)
@@ -223,11 +220,16 @@ describe('end-to-end notification pipeline', () => {
 
   it('edge 18/19 (e2e): exhausts retries into the DLQ, then an operator retry delivers it', async () => {
     const userId = await createUser(s.c);
+    // Failures from earlier tests are still inside the breaker's 60 s window.
+    await api()
+      .patch('/api/v1/ops/providers/mock-email')
+      .set(auth(admin))
+      .send({ resetCircuit: true });
     await api()
       .post('/api/v1/ops/providers/mock-email/simulate')
       .set(auth(admin))
       .send({ mode: 'fail_transient', remaining: null });
-    const eventId = await submit(userId, 'SIPX-002', SAMPLE_PAYLOADS['SIPX-002']!); // MEDIUM: 3 retries (fast test policy)
+    const eventId = await submit(userId, 'TXNX-004', SAMPLE_PAYLOADS['TXNX-004']!); // MEDIUM: 3 retries (fast test policy)
     const ns = await waitFor(
       () => notificationsOf(eventId),
       (x) => x.find((n) => n.channel === 'email')?.state === 'DLQ',
@@ -298,11 +300,11 @@ describe('end-to-end notification pipeline', () => {
     const ns = await waitFor(
       () => notificationsOf(eventId),
       (x) =>
-        x.length === 3 &&
+        x.length === 4 &&
         x.every((n) => n.state === (n.channel === 'inapp' ? 'SENT' : 'DELIVERED')),
       30000,
     );
-    expect(ns).toHaveLength(3);
+    expect(ns).toHaveLength(4);
   });
 
   it('edge 6 (e2e): duplicate event ingestion yields one set of notifications', async () => {

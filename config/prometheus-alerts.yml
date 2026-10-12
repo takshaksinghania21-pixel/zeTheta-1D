@@ -1,0 +1,62 @@
+# Prometheus alerting rules for the seven alerts in PDF §A11.2 (p.23).
+# Load with `rule_files: [config/prometheus-alerts.yml]`; route severity=critical to
+# the on-call pager and severity=high to the operations channel in Alertmanager.
+# NOT executed in this repository (no Prometheus/Alertmanager in the local setup);
+# tests/unit/alert-rules.test.ts checks every rule references an exported metric.
+groups:
+  - name: zetheta-notification-engine
+    rules:
+      - alert: HighDLQDepth
+        expr: notification_dlq_depth > 100
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: 'DLQ depth {{ $value }} > 100 for 5 minutes — page on-call (runbook: docs/RUNBOOKS.md)'
+
+      - alert: ProviderCircuitOpen
+        expr: delivery_provider_circuit_state == 2
+        labels: { severity: high }
+        annotations:
+          summary: 'Circuit breaker OPEN for provider {{ $labels.provider }} — notify operations'
+
+      - alert: DeliveryLatencySpike
+        expr: >
+          histogram_quantile(0.99,
+            sum by (le) (rate(notification_delivery_latency_seconds_bucket{priority="CRITICAL"}[5m]))
+          ) > 30
+        labels: { severity: critical }
+        annotations:
+          summary: 'P99 delivery latency for CRITICAL notifications above 30 s — page on-call'
+
+      - alert: HighFailureRate
+        expr: >
+          sum(rate(notification_delivery_total{status!="success"}[10m]))
+            / sum(rate(notification_delivery_total[10m])) > 0.05
+        labels: { severity: high }
+        annotations:
+          summary: 'Delivery failure rate above 5% over 10 minutes'
+
+      - alert: KafkaConsumerLag
+        expr: sum by (topic, consumer_group) (kafka_consumer_lag) > 10000
+        for: 5m
+        labels: { severity: high }
+        annotations:
+          summary: 'Consumer {{ $labels.consumer_group }} lags {{ $value }} messages on {{ $labels.topic }}'
+
+      # Approximation: the PDF asks for "> 50% of users hitting the daily cap"; per-user
+      # counts live in Redis, so this uses capped events per received event instead.
+      # GET /api/v1/analytics/delivery-rates reports the exact percentage_of_users_hitting_cap.
+      - alert: FrequencyCapExhaustion
+        expr: >
+          sum(rate(notification_frequency_cap_hits_total[1h]))
+            / sum(rate(notification_events_received_total{outcome="accepted"}[1h])) > 0.5
+        for: 30m
+        labels: { severity: medium }
+        annotations:
+          summary: 'More than half of notifications are being capped — review notification strategy'
+
+      - alert: DNDViolationDetected
+        expr: notification_dnd_violations > 0
+        labels: { severity: critical }
+        annotations:
+          summary: 'Promotional SMS sent without a dispatch-time DND clearance — page on-call and notify compliance'

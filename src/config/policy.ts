@@ -56,7 +56,8 @@ const policySchema = z.object({
     sameEventCooldownSeconds: z.number().int().min(0),
     countExemptEvents: z.boolean(),
     digestSuggestion: z.object({
-      capHitThreshold: z.number().int().min(1),
+      /** Suggest a digest when the window's average exceeds this many per day. */
+      dailyThreshold: z.number().int().min(1),
       windowSeconds: z.number().int().min(60),
     }),
   }),
@@ -81,10 +82,11 @@ const policySchema = z.object({
   templates: z.object({
     supportedLocales: z.array(z.enum(LOCALES)),
     fallbackLocale: z.enum(LOCALES),
-    smsMaxSegments: z.number().int().min(1).max(10),
+    smsMaxChars: z.number().int().min(70).max(1600).default(160),
   }),
   circuitBreaker: z.object({
     failureThreshold: z.number().int().min(1),
+    failureWindowMs: z.number().int().min(100).default(60000),
     openDurationMs: z.number().int().min(100),
     halfOpenMaxTrials: z.number().int().min(1),
   }),

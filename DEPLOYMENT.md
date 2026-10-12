@@ -137,6 +137,6 @@ Not production-ready as delivered. Remaining work:
 3. Single-broker Kafka/RabbitMQ only; replication factors, quorum queues, TLS
    and SASL on all hops need production configuration.
 4. Load tests were run on one laptop with all roles in one process
-   (docs/PERFORMANCE.md); capacity planning for millions of notifications/day is
+   (docs/performance-benchmarks.md); capacity planning for millions of notifications/day is
    an estimate, not a measurement.
 5. Compliance assumptions in SECURITY.md §2 need legal sign-off.

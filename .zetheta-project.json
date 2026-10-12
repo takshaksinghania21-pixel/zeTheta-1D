@@ -1,0 +1,24 @@
+{
+  "intern_id": "[YOUR_INTERN_ID]",
+  "intern_name": "[YOUR_NAME]",
+  "intern_email": "[YOUR_EMAIL]",
+  "project_code": "BE-6B",
+  "project_title": "Event-Driven Notification Engine with Multi-Channel Delivery",
+  "submission_type": "github",
+  "tech_stack": ["TypeScript", "Node.js", "PostgreSQL", "Redis", "Kafka", "RabbitMQ", "Docker"],
+  "duration_days": 15,
+  "github_repo_url": "https://github.com/[YOUR_USERNAME]/BE-6B-NotificationEngine-[YourName]",
+  "assessment_criteria": {
+    "event_driven_architecture": true,
+    "multi_channel_delivery": true,
+    "template_engine": true,
+    "user_preferences": true,
+    "dnd_compliance": true,
+    "frequency_capping": true,
+    "delivery_tracking": true,
+    "dead_letter_queue": true,
+    "analytics_pipeline": true,
+    "load_testing": true,
+    "ci_cd_pipeline": true
+  }
+}

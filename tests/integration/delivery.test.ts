@@ -79,12 +79,13 @@ describe('event processor (Kafka handler logic)', () => {
       'email:QUEUED',
       'inapp:QUEUED',
       'push:QUEUED',
+      'sms:QUEUED', // PDF §A2: TXNX-001 → SMS, Push, Email (+ in-app feed)
     ]);
     expect(ns.every((n) => n.content?.body.includes('INFY'))).toBe(true);
     expect((await c.ingestion().getEvent(eventId))?.status).toBe('PROCESSED');
     expect((await c.decisions().list({ eventId, limit: 50 })).length).toBeGreaterThan(0);
     const rabbit = await c.db()('outbox').where({ destination: 'RABBITMQ' });
-    expect(rabbit).toHaveLength(3);
+    expect(rabbit).toHaveLength(4);
   });
 
   it('edge 6/8: re-processing the same event (redelivery after a crash) creates no duplicates', async () => {
@@ -100,7 +101,7 @@ describe('event processor (Kafka handler logic)', () => {
       schemaVersion: 1,
     });
     expect(again).toBe('PROCESSED');
-    expect(await c.notifications().byEvent(eventId)).toHaveLength(3);
+    expect(await c.notifications().byEvent(eventId)).toHaveLength(4);
     expect(
       await c.processor().process({
         eventId,
@@ -192,6 +193,104 @@ describe('event processor (Kafka handler logic)', () => {
     ).toBe(1);
   });
 
+  it('escalates a margin call with no reachable mandatory channel to the manual-call queue', async () => {
+    const userId = await createUser(c, {
+      contacts: [{ channel: 'email', value: 'only-email@example.test' }],
+    });
+    const eventId = await ingestAndProcess(userId, 'RISK-001');
+    const { items } = await c.dlqRepo().list({ source: 'EVENT', limit: 10, offset: 0 });
+    const entry = items.find((e) => e.event_id === eventId);
+    expect(entry).toMatchObject({ reason_code: 'ESCALATE_MANUAL_CALL', status: 'OPEN' });
+    expect(entry?.reason_message).toMatch(/sms, push/);
+  });
+
+  it('re-checks DND at dispatch: a number registered after routing is not sent a promotional SMS', async () => {
+    const userId = await createUser(c);
+    const importDnd = (status: 'FULLY_BLOCKED' | 'NOT_REGISTERED') =>
+      c.dndSource().import({
+        source: 'fixture',
+        snapshotAt: new Date(),
+        importedBy: 't',
+        entries:
+          status === 'NOT_REGISTERED'
+            ? []
+            : [{ phoneHash: c.users().phoneHash('+919812345678'), status, blockedCategories: [] }],
+      });
+    await importDnd('NOT_REGISTERED');
+    await c.consents().record({
+      userId,
+      channel: 'sms',
+      purpose: 'PROMOTIONAL',
+      status: 'GRANTED',
+      source: 'APP',
+      recordedBy: 't',
+    });
+    await c
+      .users()
+      .updatePreferences(
+        userId,
+        (p) => ({ ...p, categories: { SIP: { channels: ['sms', 'inapp'] } } }),
+        't',
+      );
+    const eventId = await ingestAndProcess(userId, 'SIPX-004');
+    const sms = await channelNotification(eventId, 'sms');
+    expect(sms.state).toBe('QUEUED'); // allowed at routing time
+    // The user registers on DND before the message leaves (backlog, deferral, retry).
+    await importDnd('FULLY_BLOCKED');
+    await c.dndCache().invalidateAll();
+    const sentBefore = provider('mock-sms-primary').sent.length;
+    expect(await c.dispatcher().handle(msg(sms))).toBe('ack');
+    expect((await c.notifications().require(sms.id)).state).toBe('DND');
+    expect(provider('mock-sms-primary').sent.length).toBe(sentBefore);
+    const [blocked] = await c.decisions().list({ eventId, rule: 'DND_FULLY_BLOCKED', limit: 5 });
+    expect(blocked?.metadata).toMatchObject({ stage: 'DISPATCH' });
+  });
+
+  it('self-audits DND: a sent promotional SMS without a dispatch-time clearance is a violation', async () => {
+    const userId = await createUser(c);
+    await c
+      .dndSource()
+      .import({ source: 'fixture', snapshotAt: new Date(), importedBy: 't', entries: [] });
+    await c.consents().record({
+      userId,
+      channel: 'sms',
+      purpose: 'PROMOTIONAL',
+      status: 'GRANTED',
+      source: 'APP',
+      recordedBy: 't',
+    });
+    await c
+      .users()
+      .updatePreferences(
+        userId,
+        (p) => ({ ...p, categories: { SIP: { channels: ['sms'] } } }),
+        't',
+      );
+    const sms = await channelNotification(await ingestAndProcess(userId, 'SIPX-004'), 'sms');
+    await c.dispatcher().handle(msg(sms));
+    expect((await c.notifications().require(sms.id)).state).toBe('SENT');
+    expect(await c.decisions().dndViolations(new Date())).toBe(0);
+    await c
+      .db()('policy_decisions')
+      .where({ notification_id: sms.id })
+      .andWhereRaw(`metadata->>'stage' = 'DISPATCH'`)
+      .del();
+    expect(await c.decisions().dndViolations(new Date())).toBe(1);
+  });
+
+  it('records a dispatch-time DND check for every SMS that is sent (audit proof)', async () => {
+    const userId = await createUser(c);
+    const sms = await channelNotification(await ingestAndProcess(userId, 'TXNX-003'), 'sms');
+    await c.dispatcher().handle(msg(sms));
+    expect((await c.notifications().require(sms.id)).state).toBe('SENT');
+    const checks = (await c.decisions().list({ userId, limit: 50 })).filter(
+      (d) => d.notification_id === sms.id && String(d.rule).startsWith('DND_'),
+    );
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatchObject({ rule: 'DND_NOT_APPLICABLE', outcome: 'ALLOW' });
+    expect(checks[0]?.metadata).toMatchObject({ stage: 'DISPATCH' });
+  });
+
   it('edge 10: defers push during quiet hours and schedules a durable release job', async () => {
     const userId = await createUser(c);
     const now = new Date();
@@ -236,7 +335,7 @@ describe('delivery dispatcher', () => {
     ).toEqual(['mock-sms-primary:FAILED', 'mock-sms-secondary:SUCCESS']);
   });
 
-  it('edge 4: schedules a durable RabbitMQ retry when every provider is unavailable', async () => {
+  it('edge 4: schedules a retry in the Redis sorted set when every provider is unavailable', async () => {
     const userId = await createUser(c);
     const push = await channelNotification(await ingestAndProcess(userId), 'push');
     await c.db()('outbox').del();
@@ -244,17 +343,20 @@ describe('delivery dispatcher', () => {
     await c.dispatcher().handle(msg(push));
     const n = await c.notifications().require(push.id);
     expect(n).toMatchObject({ state: 'RETRYING', retry_count: 1, last_error_code: 'MOCK_503' });
+    expect(await c.db()('outbox').where({ destination: 'RABBITMQ' })).toHaveLength(0);
+    const key = `${c.config.RABBITMQ_PREFIX}retry:schedule`;
+    const [member, score] = await c.redis().zrange(key, 0, -1, 'WITHSCORES');
+    expect(JSON.parse(member ?? '{}')).toMatchObject({ id: push.id, channel: 'push', retry: 1 });
+    expect(Number(score)).toBe(new Date(n.next_attempt_at ?? 0).getTime());
+    // once due, the retry is released to the channel's delivery queue
+    expect(await c.retryScheduler().releaseDue(new Date(Number(score)))).toBe(1);
     const retry = (await c.db()('outbox').where({ destination: 'RABBITMQ' }).first()) as {
       target: string;
       routing_key: string;
-      expiration_ms: number;
-      headers: Record<string, string>;
       payload: DeliveryMessage;
     };
-    expect(retry.target).toBe(c.topology.retryExchange);
+    expect(retry.target).toBe(c.topology.deliveryExchange);
     expect(retry.routing_key).toBe('push');
-    expect(retry.expiration_ms).toBeGreaterThan(0);
-    expect(retry.headers['retry-band']).toMatch(/^\d+$/);
     expect(retry.payload.retry).toBe(1);
     // the retried delivery succeeds; the stale original message is ignored
     expect(await c.dispatcher().handle(msg(push, 0))).toBe('ack');
@@ -270,14 +372,12 @@ describe('delivery dispatcher', () => {
     await mock.set('mock-email', { mode: 'fail_permanent', remaining: null });
     await c.dispatcher().handle(msg(email));
     expect((await c.notifications().require(email.id)).state).toBe('FAILED');
-    expect(
-      await c.db()('outbox').where({ destination: 'RABBITMQ', target: c.topology.retryExchange }),
-    ).toHaveLength(0);
+    expect(await c.redis().zcard(`${c.config.RABBITMQ_PREFIX}retry:schedule`)).toBe(0);
   });
 
-  it('edge 16: an invalid push token marks the contact invalid and falls back to SMS', async () => {
+  it('edge 16: an invalid push token marks the contact invalid and falls back to email', async () => {
     const userId = await createUser(c);
-    const eventId = await ingestAndProcess(userId);
+    const eventId = await ingestAndProcess(userId, 'TXNX-003'); // push, sms, in-app; fallback email
     const push = await channelNotification(eventId, 'push');
     await mock.set('mock-push', { mode: 'invalid_recipient', remaining: 1 });
     await c.dispatcher().handle(msg(push));
@@ -287,7 +387,7 @@ describe('delivery dispatcher', () => {
       .where({ user_id: userId, channel: 'push' })
       .first();
     expect(contact).toMatchObject({ status: 'INVALID' });
-    const fallback = await channelNotification(eventId, 'sms');
+    const fallback = await channelNotification(eventId, 'email');
     expect(fallback).toMatchObject({ state: 'QUEUED', parent_notification_id: push.id });
     expect((await c.decisions().list({ notificationId: fallback.id, limit: 5 }))[0]).toMatchObject({
       rule: 'FALLBACK_CHANNEL',
@@ -311,6 +411,7 @@ describe('delivery dispatcher', () => {
       source: 'DELIVERY',
     });
     expect(entry.retry_history).toHaveLength(6);
+    expect(entry.classification).toBe('TRANSIENT'); // automated DLQ classification (Day 9)
     expect(await c.db()('outbox').where({ target: c.topology.dlx })).toHaveLength(1);
   });
 
@@ -343,7 +444,8 @@ describe('delivery dispatcher', () => {
     const userId = await createUser(c);
     const email = await channelNotification(await ingestAndProcess(userId, 'SIPX-002'), 'email');
     await mock.set('mock-email', { mode: 'fail_transient', remaining: null });
-    for (let retry = 0; retry <= 3; retry++) {
+    for (let retry = 0; retry <= 5; retry++) {
+      // SIPX-002 is HIGH: 5 retries
       await c.dispatcher().handle(msg(email, retry));
       await c.circuit().reset('mock-email');
     }

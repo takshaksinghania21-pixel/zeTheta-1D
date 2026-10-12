@@ -17,18 +17,19 @@ export function createLogger(
     {
       level: options.level,
       messageKey: 'message',
+      // Field names follow PDF §A11.1: timestamp, level, message, correlation_id, service_name.
       base: {
-        service: options.service,
+        service_name: options.service,
         ...(options.component ? { component: options.component } : {}),
       },
-      timestamp: pino.stdTimeFunctions.isoTime,
+      timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
       formatters: {
         level: (label) => ({ level: label }),
         log: (obj) => sanitizeForLog(obj) as Record<string, unknown>,
       },
       mixin: () => {
         const ctx = currentContext();
-        return ctx ? { correlationId: ctx.correlationId } : {};
+        return ctx ? { correlation_id: ctx.correlationId } : {};
       },
       redact: {
         paths: [
@@ -44,18 +45,4 @@ export function createLogger(
     },
     destination,
   );
-}
-
-let rootLogger: Logger | undefined;
-
-export function getLogger(): Logger {
-  rootLogger ??= createLogger({
-    service: process.env.SERVICE_NAME ?? 'zetheta-notification-engine',
-    level: process.env.LOG_LEVEL ?? 'info',
-  });
-  return rootLogger;
-}
-
-export function setRootLogger(logger: Logger): void {
-  rootLogger = logger;
 }

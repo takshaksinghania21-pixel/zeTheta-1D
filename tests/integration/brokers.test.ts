@@ -11,7 +11,6 @@ import {
   assertTopology,
   consumeQueue,
   queueDepths,
-  RETRY_BAND_HEADER,
 } from '../../src/infrastructure/rabbitmq/rabbitmq';
 import { migrate, truncateAll } from '../helpers/db';
 import { testConfig } from '../helpers/env';
@@ -39,11 +38,10 @@ afterAll(async () => {
       (x) => `${c.config.RABBITMQ_PREFIX}delivery.${x}`,
     ),
     c.topology.dlqQueue,
-    ...Array.from({ length: 15 }, (_, i) => c.topology.retryQueue(i + 9)),
   ]) {
     await ch.deleteQueue(q).catch(() => undefined);
   }
-  for (const ex of [c.topology.deliveryExchange, c.topology.retryExchange, c.topology.dlx])
+  for (const ex of [c.topology.deliveryExchange, c.topology.dlx])
     await ch.deleteExchange(ex).catch(() => undefined);
   await ch.close().catch(() => undefined);
   const admin = c.kafka().admin();
@@ -58,9 +56,21 @@ describe('Kafka', () => {
     const admin = c.kafka().admin();
     await admin.connect();
     await ensureTopics(admin, c.topics, { partitions: 2, replicationFactor: 1 });
-    const meta = await admin.fetchTopicMetadata({ topics: [c.topics.financialEvents] });
-    expect(meta.topics[0]?.partitions).toHaveLength(2);
+    const meta = await admin.fetchTopicMetadata({ topics: [c.topics.events, c.topics.critical] });
+    expect(meta.topics.map((t) => t.partitions.length)).toEqual([2, 2]);
     await admin.disconnect();
+  });
+
+  it('uses the PDF topic names and routes CRITICAL events to the dedicated critical topic', () => {
+    const p = c.config.KAFKA_TOPIC_PREFIX;
+    expect(c.topics).toMatchObject({
+      events: `${p}notification-events`,
+      critical: `${p}notification-critical`,
+      dlq: `${p}notification-dlq`,
+    });
+    expect(c.eventTopic('RISK-001')).toBe(c.topics.critical);
+    expect(c.eventTopic('MKTX-002')).toBe(c.topics.critical);
+    expect(c.eventTopic('TXNX-001')).toBe(c.topics.events);
   });
 
   it('publishes and consumes with key ordering, headers (correlation id) and committed offsets', async () => {
@@ -69,7 +79,7 @@ describe('Kafka', () => {
     const groupId = `${c.config.KAFKA_TOPIC_PREFIX}itest-group`;
     const consumer = await runConsumer(
       c.kafka(),
-      { groupId, topic: c.topics.financialEvents, concurrency: 2 },
+      { groupId, topic: c.topics.events, concurrency: 2 },
       async ({ message, partition }) => {
         received.push({
           value: message.value?.toString() ?? '',
@@ -81,7 +91,7 @@ describe('Kafka', () => {
       c.logger,
     );
     await producer.send({
-      topic: c.topics.financialEvents,
+      topic: c.topics.events,
       messages: Array.from({ length: 6 }, (_, i) => ({
         key: 'same-user',
         value: `m${i}`,
@@ -96,10 +106,15 @@ describe('Kafka', () => {
     expect(received.map((r) => r.value)).toEqual(['m0', 'm1', 'm2', 'm3', 'm4', 'm5']); // per-key ordering
     expect(new Set(received.map((r) => r.partition)).size).toBe(1);
     expect(received[3]?.correlationId).toBe('corr-3');
-    await consumer.disconnect(); // commits resolved offsets
+    // Offsets are committed manually after each handler resolves.
     const admin = c.kafka().admin();
     await admin.connect();
-    expect(await consumerLag(admin, groupId, c.topics.financialEvents)).toBe(0);
+    await waitFor(
+      async () => (await consumerLag(admin, groupId, c.topics.events)).total,
+      (lag) => lag === 0,
+      10000,
+    );
+    await consumer.disconnect();
     await admin.disconnect();
   });
 });
@@ -129,28 +144,6 @@ describe('RabbitMQ topology', () => {
       10, 7, 4, 1, 1,
     ]);
     expect(msgs[0]?.properties.deliveryMode).toBe(2); // persistent
-  });
-
-  it('routes a retry to exactly one delay band and dead-letters it back to the channel queue after its TTL', async () => {
-    await c.rabbit().publish(c.topology.retryExchange, 'email', Buffer.from('{"retry":1}'), {
-      expiration: '300',
-      headers: { [RETRY_BAND_HEADER]: '9' },
-    });
-    const depths = await queueDepths(
-      c.rabbit(),
-      Array.from({ length: 15 }, (_, i) => c.topology.retryQueue(i + 9)),
-    );
-    expect(Object.values(depths).reduce((s, d) => s + d.messages, 0)).toBe(1);
-    expect(depths[c.topology.retryQueue(9)]?.messages).toBe(1);
-    expect(await ch.get(c.topology.deliveryQueue('email'))).toBe(false);
-    const msgs = await waitFor(
-      () => take(c.topology.deliveryQueue('email')),
-      (m) => m.length === 1,
-      5000,
-      100,
-    );
-    expect(msgs[0]?.content.toString()).toBe('{"retry":1}');
-    expect(msgs[0]?.properties.headers?.['x-death']).toBeDefined();
   });
 
   it('dead-letters rejected (poison) messages to the DLQ queue', async () => {
@@ -282,5 +275,123 @@ describe('Transactional outbox relay', () => {
       5000,
     );
     expect(depth[c.topology.deliveryQueue('inapp')]?.messages).toBe(40);
+  });
+});
+
+describe('Redis retry schedule (sorted set)', () => {
+  const target = (i: number) => ({
+    id: `00000000-0000-4000-8000-00000000000${i}`,
+    created_at: new Date('2026-10-12T00:00:00Z'),
+    channel: 'sms' as const,
+    priority: 'HIGH' as const,
+    correlation_id: `corr-${i}`,
+  });
+  const queuedRetries = async () =>
+    (await c
+      .db()('outbox')
+      .where({ destination: 'RABBITMQ', target: c.topology.deliveryExchange })) as {
+      routing_key: string;
+      payload: { notificationId: string; retry: number };
+    }[];
+
+  beforeEach(async () => {
+    await c.db()('outbox').del();
+    await c.redis().del(`${c.config.RABBITMQ_PREFIX}retry:schedule`);
+  });
+
+  it('releases only due retries, in due order, exactly once across concurrent pollers', async () => {
+    const t0 = new Date('2026-10-12T10:00:00Z');
+    const rs = c.retryScheduler();
+    await rs.schedule(target(2), 2, new Date(t0.getTime() + 2000));
+    await rs.schedule(target(1), 1, new Date(t0.getTime() + 1000));
+    await rs.schedule(target(3), 3, new Date(t0.getTime() + 60000));
+    expect(await rs.releaseDue(t0)).toBe(0);
+    const released = await Promise.all([
+      rs.releaseDue(new Date(t0.getTime() + 5000)),
+      rs.releaseDue(new Date(t0.getTime() + 5000)),
+    ]);
+    expect(released[0] + released[1]).toBe(2);
+    const rows = await queuedRetries();
+    expect(rows.map((r) => r.payload.retry).sort()).toEqual([1, 2]);
+    expect(rows.every((r) => r.routing_key === 'sms')).toBe(true);
+    expect(await rs.depth()).toBe(1);
+  });
+
+  it('caps the number released per tick (retry-storm guard)', async () => {
+    const { RedisRetryScheduler } = await import('../../src/modules/retries/retry-scheduler');
+    const rs = new RedisRetryScheduler(
+      c.redis(),
+      c.db(),
+      c.factory(),
+      c.logger,
+      `${c.config.RABBITMQ_PREFIX}retry:schedule`,
+      2,
+    );
+    const now = new Date();
+    for (let i = 1; i <= 5; i++) await rs.schedule(target(i), i, now);
+    expect(await rs.releaseDue(now)).toBe(2);
+    expect(await rs.depth()).toBe(3);
+  });
+});
+
+describe('worker error paths (no silent failures)', () => {
+  const workers = () => import('../../src/workers/workers');
+
+  it('parks poison and non-retryable Kafka events in the DLQ table and on notification-dlq', async () => {
+    const { startEventConsumer } = await workers();
+    await c.db()('outbox').del();
+    const consumer = await startEventConsumer(c);
+    const producer = await c.producer();
+    const unknownEvent = '00000000-0000-4000-8000-0000000000aa';
+    await producer.send({
+      topic: c.topics.events,
+      messages: [
+        { key: 'u', value: 'not json at all', headers: { 'x-correlation-id': 'corr-poison-0001' } },
+        {
+          key: 'u',
+          value: JSON.stringify({
+            eventId: unknownEvent,
+            eventType: 'TXNX-001',
+            userId: '00000000-0000-4000-8000-0000000000bb',
+            occurredAt: new Date().toISOString(),
+            correlationId: 'corr-unknown-0001',
+            schemaVersion: 1,
+          }),
+        },
+      ],
+    });
+    const entries = await waitFor(
+      async () => (await c.dlqRepo().list({ limit: 20, offset: 0 })).items,
+      (items) =>
+        items.some((e) => e.reason_code === 'INVALID_KAFKA_MESSAGE') &&
+        items.some((e) => (e.payload as { eventId?: string }).eventId === unknownEvent),
+      20000,
+    );
+    expect(entries.find((e) => e.reason_code === 'INVALID_KAFKA_MESSAGE')?.classification).toBe(
+      'PERMANENT',
+    );
+    const dlqTopic = await c.db()('outbox').where({ destination: 'KAFKA', target: c.topics.dlq });
+    expect(dlqTopic.length).toBeGreaterThanOrEqual(2);
+    await consumer.stop();
+  });
+
+  it('dead-letters a malformed delivery message and records it via the DLQ ingest worker', async () => {
+    const { startDispatcher, startDlqIngest } = await workers();
+    const dispatcher = await startDispatcher(c, ['whatsapp']);
+    const ingest = await startDlqIngest(c);
+    await c
+      .rabbit()
+      .publish(c.topology.deliveryExchange, 'whatsapp', Buffer.from('{"notificationId":"x"}'), {});
+    const entry = await waitFor(
+      async () =>
+        (await c.dlqRepo().list({ source: 'POISON', limit: 20, offset: 0 })).items.find(
+          (e) => e.reason_code === 'POISON_MESSAGE',
+        ),
+      (e) => e !== undefined,
+      20000,
+    );
+    expect(entry?.payload).toMatchObject({ routingKey: 'poison' });
+    await dispatcher.stop();
+    await ingest.stop();
   });
 });

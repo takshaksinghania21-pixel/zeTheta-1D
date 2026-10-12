@@ -65,7 +65,7 @@ async function main(): Promise<void> {
       `VUS=${VUS}`,
       '-e',
       `RUN_ID=${run}`,
-      'load-tests/ingestion.js',
+      'tests/load/ingestion.js',
     ],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   );

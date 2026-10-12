@@ -27,8 +27,8 @@ templates:
     long: "Hi {{user.name}},\n\nWe received {{currency amount}} via {{mode}} on {{date depositedAt format='datetime'}}. Reference: {{referenceId}}.{{#if availableBalance}}\n\nYour available balance is now {{currency availableBalance}}.{{/if}}"
   RISK-001:
     title: 'URGENT: Margin call'
-    short: "URGENT margin call: required {{currency marginRequired}}, available {{currency marginAvailable}}. Add funds by {{date deadline format='datetime'}} to avoid square-off. -Zetheta"
-    long: "Hi {{user.name}},\n\nYour account has received a margin call.\n\nMargin required: {{currency marginRequired}}\nMargin available: {{currency marginAvailable}} ({{number utilisationPercent decimals=2}}% utilised)\n\nPlease add funds or reduce positions before {{date deadline format='datetime'}}. Otherwise open positions may be squared off without further notice."
+    short: "URGENT margin call: required {{currency requiredMargin}}, available {{currency currentMargin}}. Add funds by {{date deadline format='datetime'}} to avoid square-off. -Zetheta"
+    long: "Hi {{user.name}},\n\nYour account has received a margin call.\n\nYour account has a margin shortfall of {{currency shortfallAmount}}.\n\nMargin required: {{currency requiredMargin}}\nMargin available: {{currency currentMargin}}\n\nPlease add funds or reduce positions before {{date deadline format='datetime'}}. Otherwise open positions may be squared off without further notice."
   RISK-002:
     title: 'URGENT: Margin shortfall {{currency shortfallAmount}}'
     short: "URGENT: margin shortfall of {{currency shortfallAmount}}. Add funds by {{date deadline format='datetime'}} or positions may be squared off. -Zetheta"

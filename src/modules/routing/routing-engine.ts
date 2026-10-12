@@ -172,6 +172,7 @@ export class RoutingEngine {
         cooldownSubject: input.cooldownSubject,
         channels: sendNow.map((p) => p.channel),
         exempt: def.frequencyCapExempt,
+        ...(def.cooldownSeconds !== undefined ? { cooldownSeconds: def.cooldownSeconds } : {}),
         now,
         ...(options.dryRun ? { dryRun: true } : {}),
       });

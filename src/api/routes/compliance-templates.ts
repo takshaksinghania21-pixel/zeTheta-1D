@@ -23,6 +23,8 @@ const TemplateSchema = z
     channel: z.string(),
     locale: z.string(),
     activeVersion: z.number().nullable(),
+    experimentVersion: z.number().nullable(),
+    experimentPercent: z.number(),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -443,7 +445,7 @@ export function registerComplianceAndTemplateRoutes(api: Api, c: Container): voi
           throw new AppError(
             'TEMPLATE_INVALID',
             422,
-            `SMS exceeds ${c.policy.templates.smsMaxSegments} segments with sample data`,
+            `SMS exceeds ${c.policy.templates.smsMaxChars} characters with sample data`,
           );
       }
       const r = await c.templateRepo().createVersion({
@@ -489,6 +491,38 @@ export function registerComplianceAndTemplateRoutes(api: Api, c: Container): voi
         targetType: 'template',
         targetId: params.id,
         metadata: { version: params.version },
+      });
+      return { status: 200, body: camel(await c.templateRepo().get(params.id)) };
+    },
+  });
+
+  api.route({
+    method: 'post',
+    path: '/templates/:id/experiment',
+    operationId: 'setTemplateExperiment',
+    summary: 'Start or stop an A/B test: `percent` of users get `version` (0 stops it)',
+    description:
+      'Assignment is deterministic per user (hash of template id and user id), so a user always sees the same variant. The variant used is recorded on each notification (`template_version`); compare variants with GET /analytics/template-variants.',
+    tags: ['Templates'],
+    auth: { permission: 'templates:write' },
+    params: UuidParam,
+    body: z.strictObject({
+      version: z.number().int().min(1).nullable(),
+      percent: z.number().int().min(0).max(100),
+    }),
+    responses: {
+      200: { description: 'Updated', schema: TemplateSchema },
+      404: { description: 'Template or version not found' },
+    },
+    handler: async ({ params, body, actor }) => {
+      await c.templateRepo().setExperiment(params.id, body.version, body.percent);
+      await c.audit().record({
+        actorId: actor.id,
+        actorRole: actor.roles.join(','),
+        action: body.percent > 0 ? 'TEMPLATE_EXPERIMENT_STARTED' : 'TEMPLATE_EXPERIMENT_STOPPED',
+        targetType: 'template',
+        targetId: params.id,
+        metadata: body,
       });
       return { status: 200, body: camel(await c.templateRepo().get(params.id)) };
     },

@@ -48,7 +48,7 @@ describe('PostgreSQL persistence', () => {
     const sms = rows.find((r) => r.channel === 'sms')!;
     expect(sms.value_ciphertext).not.toContain('9812345678');
     expect(sms.value_ciphertext.startsWith('v1.')).toBe(true);
-    expect(sms.value_masked).toBe('+********5678');
+    expect(sms.value_masked).toBe('+91XXXX5678');
     expect(sms.value_hash).toMatch(/^[0-9a-f]{64}$/);
     expect((await c.users().activeContact(userId, 'sms'))?.value).toBe(PHONE);
     // sms and whatsapp share a phone blind index (used for DND lookups)

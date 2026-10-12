@@ -224,11 +224,12 @@ export function capperContract(make: () => FrequencyCapper | Promise<FrequencyCa
     expect((await c.usage(userId, new Date(T0 + 10))).global).toBe(0);
   });
 
-  it('tracks cap hits for weekly digest suggestions within the window', async () => {
+  it('counts notified events for digest suggestions within the rolling window (idempotent)', async () => {
     const c = await make();
     const userId = uid();
-    for (let i = 0; i < 4; i++) await c.recordCapHit(userId, `h${i}`, new Date(T0 + i));
-    expect(await c.recordCapHit(userId, 'h5', new Date(T0 + 10))).toBe(5);
-    expect(await c.recordCapHit(userId, 'h6', new Date(T0 + 8 * 86_400_000))).toBe(1);
+    for (let i = 0; i < 4; i++) await c.recordNotified(userId, `h${i}`, new Date(T0 + i));
+    expect(await c.recordNotified(userId, 'h5', new Date(T0 + 10))).toBe(5);
+    expect(await c.recordNotified(userId, 'h5', new Date(T0 + 11))).toBe(5); // redelivery
+    expect(await c.recordNotified(userId, 'h6', new Date(T0 + 8 * 86_400_000))).toBe(1);
   });
 }

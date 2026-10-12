@@ -121,7 +121,8 @@ export const envSchema = z.object({
   WHATSAPP_BASE_URL: z.url().default('https://graph.facebook.com'),
 
   DND_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(3600),
-  DND_STALE_AFTER_HOURS: z.coerce.number().int().min(1).default(168),
+  // PDF §A6.1: the DND cache is refreshed daily; older data counts as stale.
+  DND_STALE_AFTER_HOURS: z.coerce.number().int().min(1).max(24).default(24),
   RETENTION_DAYS: z.coerce.number().int().min(1).default(90),
 
   OUTBOX_POLL_MS: z.coerce.number().int().min(10).default(200),

@@ -5,6 +5,28 @@ import type { PolicyDecision } from './decisions';
 export class PolicyDecisionRepository {
   constructor(private readonly db: Knex) {}
 
+  /**
+   * DND self-audit (PDF §C3.3, alert DNDViolationDetected): promotional SMS sent in the
+   * last 24 h without a dispatch-time DND clearance on record. Expected to be 0.
+   */
+  async dndViolations(now: Date): Promise<number> {
+    const since = new Date(now.getTime() - 86400000);
+    const [row] = (await this.db('notifications as n')
+      .where('n.channel', 'sms')
+      .andWhere('n.regulatory_class', 'PROMOTIONAL')
+      .andWhere('n.created_at', '>=', new Date(since.getTime() - 86400000)) // partition pruning
+      .andWhere('n.sent_at', '>=', since)
+      .whereNotExists(
+        this.db('policy_decisions as d')
+          .whereRaw('d.notification_id = n.id')
+          .andWhere('d.rule', 'like', 'DND_%')
+          .andWhere('d.outcome', 'ALLOW')
+          .andWhereRaw(`d.metadata->>'stage' = 'DISPATCH'`),
+      )
+      .count({ n: '*' })) as { n: string }[];
+    return Number(row?.n ?? 0);
+  }
+
   async insert(
     trx: Knex | Knex.Transaction,
     rows: {
