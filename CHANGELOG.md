@@ -3,9 +3,13 @@
 All notable changes are documented here. Dates are real: the project was built on
 2026-10-11 and audited against the assignment PDF and remediated on 2026-10-12
 (see docs/SUBMISSION.md for the mapping to the assignment's 15-day plan — work was
-not spread over 15 days and no backdated history was created). AI assistance
-(Claude Code) was used throughout; changes were checked against the PDF and
-the test suite, and anything not verified is labelled as such.
+not spread over 15 days and no backdated history was created).
+
+**AI usage (PDF §E4).** An AI coding assistant was used throughout. It
+significantly accelerated the requirement-by-requirement audit against the PDF,
+test scaffolding, Docker/Compose and CI configuration, load-test scripts and
+documentation drafting. Every change was reviewed and checked against the PDF and
+the test suite; anything not verified is labelled as such.
 
 ## [1.1.0] — 2026-10-12 — PDF audit and remediation
 

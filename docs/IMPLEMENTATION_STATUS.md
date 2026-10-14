@@ -25,7 +25,7 @@ Audit started 2026-10-12 on branch `main` at commit `92f1bb9`, clean tree.
 
 ## Phase 2 — Graphify architecture map ✅
 
-- Skill: `~/.claude/skills/graphify/SKILL.md`, package `graphifyy` 0.9.85
+- Tool: the Graphify knowledge-graph skill (`/graphify`), package `graphifyy` 0.9.85
   (already installed via `uv`; nothing installed).
 - Steps run as specified by the skill: detect → AST extraction (code) +
   semantic extraction (2 general-purpose subagents for 27 doc/config files) →
