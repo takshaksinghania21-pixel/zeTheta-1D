@@ -1,0 +1,17 @@
+scenario=crash duration=60s scale=1 since=2026-10-12T07:54:58.000Z ingest_s=61 drained_s=372 pending_at_end=0
+http_req_duration
+http_req_failed
+events_accepted................: 27781 462.733042/s
+http_req_duration..............: avg=2.88ms min=558µs    med=2.23ms p(90)=5.02ms p(95)=6.96ms p(99)=12.72ms max=62.44ms
+http_req_failed................: 0.00% 0 out of 27782
+iterations.....................: 27781 462.733042/s
+ event_type | events | processed | proc_p50_ms | proc_p95_ms | proc_p99_ms 
+------------+--------+-----------+-------------+-------------+-------------
+ TXNX-001   |  27781 |     27781 |       61242 |      183293 |      198183
+
+ priority | channel | notifications | sent  | capped | e2e_p50_ms | e2e_p95_ms | e2e_p99_ms 
+----------+---------+---------------+-------+--------+------------+------------+------------
+ HIGH     | email   |         27781 | 27749 |      0 |     132765 |     312252 |     345123
+ HIGH     | inapp   |         27781 | 27781 |      0 |      61267 |     183311 |     198191
+ HIGH     | push    |         27781 | 27758 |      0 |     132414 |     313133 |     345969
+

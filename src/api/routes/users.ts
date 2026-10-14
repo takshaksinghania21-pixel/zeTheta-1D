@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Container } from '../../container';
-import { ForbiddenError, ValidationError } from '../../common/errors';
-import { maskContact } from '../../common/pii';
+import { ForbiddenError, ValidationError } from '../../utils/errors';
+import { maskContact } from '../../utils/pii';
 import {
   CATEGORIES,
   CHANNELS,
@@ -9,10 +9,10 @@ import {
   SEGMENTS,
   type Category,
   type Channel,
-} from '../../domain/types';
-import { hasPermission, type Permission } from '../../modules/auth/permissions';
-import type { Principal } from '../../modules/auth/service';
-import { isValidTimezone, resolvePreferences } from '../../modules/preferences/resolver';
+} from '../../utils/types';
+import { hasPermission, type Permission } from '../middleware/permissions';
+import type { Principal } from '../middleware/auth-service';
+import { isValidTimezone, resolvePreferences } from '../../preferences/resolver';
 import {
   categoryPrefsSchema,
   channelPrefsSchema,
@@ -20,12 +20,12 @@ import {
   quietHoursSchema,
   type EffectivePreferences,
   type UserPreferences,
-} from '../../modules/preferences/types';
-import { validateQuietWindow } from '../../modules/scheduling/quiet-hours';
-import type { Api } from '../http';
+} from '../../preferences/types';
+import { validateQuietWindow } from '../../compliance/quiet-hours/quiet-hours';
+import type { Api } from '../middleware/http';
 import { camel } from '../mappers';
-import { pdfChannel } from '../pdf-contract';
-import { LocaleEnum, UserIdParam, UuidParam } from '../schemas';
+import { pdfChannel } from '../validators/pdf-contract';
+import { LocaleEnum, UserIdParam, UuidParam } from '../validators/schemas';
 
 const ContactInput = z.strictObject({
   channel: z.enum(['sms', 'email', 'push', 'whatsapp']),

@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Container } from '../../src/container';
-import { NonRetryableError } from '../../src/common/errors';
-import type { MockProvider } from '../../src/infrastructure/providers/mock';
-import { InMemoryMockBehaviorStore } from '../../src/infrastructure/providers/mock';
-import { InMemoryCircuitStore } from '../../src/modules/delivery/circuit-breaker';
-import type { DeliveryMessage, NotificationRow } from '../../src/modules/notifications/types';
-import { SAMPLE_PAYLOADS } from '../../src/modules/taxonomy/fixtures';
-import { loadTemplateSources } from '../../src/modules/templates/source';
+import { NonRetryableError } from '../../src/utils/errors';
+import type { MockProvider } from '../../src/delivery/providers/mock';
+import { InMemoryMockBehaviorStore } from '../../src/delivery/providers/mock';
+import { InMemoryCircuitStore } from '../../src/delivery/circuit-breaker/circuit-breaker';
+import type { DeliveryMessage, NotificationRow } from '../../src/database/models/notification';
+import { SAMPLE_PAYLOADS } from '../../src/events/models/fixtures';
+import { loadTemplateSources } from '../../src/templates/definitions/source';
 import { migrate, truncateAll } from '../helpers/db';
 import { testConfig } from '../helpers/env';
 import { createUser } from '../helpers/stack';
@@ -500,6 +500,49 @@ describe('delivery dispatcher', () => {
     await c.dispatcher().handle(msg(b));
     expect((await c.notifications().require(a.id)).provider).toBe('mock-sms-primary');
     expect((await c.notifications().require(b.id)).provider).toBe('mock-sms-secondary');
+  });
+
+  it('reserves provider quota for CRITICAL traffic (no priority inversion under bulk load)', async () => {
+    const userId = await createUser(c);
+    await c.registry().updateConfig('mock-push', { rate_limit_per_minute: 5 }, 'test');
+    c.registry().invalidate();
+    const pushFor = async (orderId: string) =>
+      channelNotification(
+        await ingestAndProcess(userId, 'TXNX-003', { ...SAMPLE_PAYLOADS['TXNX-003'], orderId }),
+        'push',
+      );
+    for (let i = 0; i < 4; i++) {
+      const n = await pushFor(`BULK-${i}`);
+      await c.dispatcher().handle(msg(n));
+      expect((await c.notifications().require(n.id)).state).toBe('SENT');
+    }
+    const fifth = await pushFor('BULK-5');
+    await c.dispatcher().handle(msg(fifth));
+    expect((await c.notifications().require(fifth.id)).state).toBe('RETRYING'); // 80% used
+    const marginCall = await channelNotification(
+      await ingestAndProcess(userId, 'RISK-001'),
+      'push',
+    );
+    await c.dispatcher().handle(msg(marginCall));
+    expect((await c.notifications().require(marginCall.id)).state).toBe('SENT');
+  });
+
+  it('waits for local provider quota without spending the retry budget (no DLQ under overload)', async () => {
+    const userId = await createUser(c);
+    await c.registry().updateConfig('mock-push', { rate_limit_per_minute: 1 }, 'test');
+    c.registry().invalidate();
+    const pushFor = async (orderId: string) =>
+      channelNotification(
+        await ingestAndProcess(userId, 'TXNX-003', { ...SAMPLE_PAYLOADS['TXNX-003'], orderId }),
+        'push',
+      );
+    await c.dispatcher().handle(msg(await pushFor('Q-1'))); // uses the only slot this minute
+    const throttled = await pushFor('Q-2');
+    for (let retry = 0; retry <= 8; retry++) await c.dispatcher().handle(msg(throttled, retry));
+    const n = await c.notifications().require(throttled.id);
+    expect(n.state).toBe('RETRYING'); // never DLQ, although HIGH allows only 5 retries
+    expect(n.last_error_code).toBe('LOCAL_RATE_LIMIT');
+    expect(n.retry_count - n.retry_budget_start).toBe(0);
   });
 
   it('provider timeouts are classified as transient and fail over', async () => {

@@ -1,8 +1,8 @@
 import { io as ioClient, type Socket } from 'socket.io-client';
 import request from 'supertest';
-import { CHANNELS } from '../../src/domain/types';
+import { CHANNELS } from '../../src/utils/types';
 import { queueDepths } from '../../src/infrastructure/rabbitmq/rabbitmq';
-import { SAMPLE_PAYLOADS } from '../../src/modules/taxonomy/fixtures';
+import { SAMPLE_PAYLOADS } from '../../src/events/models/fixtures';
 import { startWorkers, stopWorkers } from '../../src/workers/main';
 import { startDispatcher, startOutboxRelay, type RunningWorker } from '../../src/workers/workers';
 import {
@@ -169,6 +169,16 @@ describe('end-to-end notification pipeline', () => {
     const latency = (await api().get('/api/v1/analytics/latency').set(auth(operator))).body
       .data as { channel: string; sendLatencyMs: { p50: number; p99: number } }[];
     expect(latency.find((l) => l.channel === 'push')?.sendLatencyMs.p50).toBeGreaterThan(0);
+    // Real-time Redis counters (Day 10) and the per-user engagement feature store (§A3.2 P3).
+    const realtime = await waitFor(
+      async () =>
+        (await api().get('/api/v1/analytics/realtime?minutes=10').set(auth(operator))).body
+          .byChannel as Record<string, { delivered?: number }>,
+      (rt) => (rt.push?.delivered ?? 0) >= 1 && (rt.inapp?.delivered ?? 0) >= 1,
+      30000,
+    );
+    expect(realtime.push?.delivered).toBeGreaterThanOrEqual(1);
+    expect((await s.c.features().engagement(userId)).inapp?.engaged).toBeGreaterThanOrEqual(1);
     socket.disconnect();
   });
 
@@ -327,5 +337,212 @@ describe('end-to-end notification pipeline', () => {
       30000,
     );
     expect(ns).toHaveLength(3);
+  });
+});
+
+// The same compliance flows were checked against the Docker Compose deployment
+// (reports/docker-functional.json); here they run on the e2e stack with mock providers.
+describe('compliance and delivery flows (all workers, mock providers)', () => {
+  type Decision = { rule: string; channel: string | null; outcome: string };
+  const eventStatus = async (eventId: string) =>
+    (await api().get(`/api/v1/events/${eventId}`).set(auth(operator))).body as {
+      status: string;
+      notifications: { id: string; channel: string; state: string }[];
+      decisions: Decision[];
+    };
+  const processed = (eventId: string) =>
+    waitFor(
+      () => eventStatus(eventId),
+      (e) => e.status === 'PROCESSED',
+      30000,
+    );
+  const stateOf = (e: { notifications: { channel: string; state: string }[] }, ch: string) =>
+    e.notifications.find((n) => n.channel === ch)?.state;
+  const has = (e: { decisions: Decision[] }, ch: string, rule: string, outcome: string) =>
+    e.decisions.some((d) => d.channel === ch && d.rule === rule && d.outcome === outcome);
+  const hhmm = (d: Date) => d.toISOString().slice(11, 16);
+  const uniquePhone = () =>
+    `+9198${String(Date.now()).slice(-6)}${Math.floor(Math.random() * 90 + 10)}`;
+  let quietUser = '';
+
+  it('quiet hours defer push and SMS; in-app is delivered', async () => {
+    quietUser = await createUser(s.c);
+    const now = Date.now();
+    // A 7-hour window around "now" in UTC (minimum is 6 h), so the test is time-independent.
+    const q = await api()
+      .put(`/api/v1/users/${quietUser}/preferences/quiet-hours`)
+      .set(auth(service))
+      .send({
+        enabled: true,
+        start: hhmm(new Date(now - 3600_000)),
+        end: hhmm(new Date(now + 6 * 3600_000)),
+        timezone: 'UTC',
+      });
+    expect(q.status).toBe(200);
+    const e = await processed(await submit(quietUser, 'TXNX-005', SAMPLE_PAYLOADS['TXNX-005']!));
+    expect(stateOf(e, 'push')).toBe('QUIET');
+    expect(stateOf(e, 'sms')).toBe('QUIET');
+    expect(stateOf(e, 'inapp')).toBe('SENT');
+    expect(has(e, 'push', 'QUIET_HOURS_DEFER', 'DEFER')).toBe(true);
+    expect(has(e, 'sms', 'QUIET_HOURS_DEFER', 'DEFER')).toBe(true);
+  });
+
+  it('a CRITICAL margin call bypasses quiet hours and the bypass is recorded', async () => {
+    const eventId = await submit(quietUser, 'RISK-001', SAMPLE_PAYLOADS['RISK-001']!);
+    const e = await waitFor(
+      () => eventStatus(eventId),
+      (x) =>
+        x.status === 'PROCESSED' &&
+        ['sms', 'push'].every((ch) => ['SENT', 'DELIVERED'].includes(stateOf(x, ch) ?? '')),
+      30000,
+    );
+    expect(has(e, 'sms', 'QUIET_HOURS_BYPASS', 'BYPASS')).toBe(true);
+    expect(has(e, 'push', 'QUIET_HOURS_BYPASS', 'BYPASS')).toBe(true);
+    // The audit record is the persisted policy decision, with its check time.
+    const stored = await s.c
+      .db()('policy_decisions')
+      .where({ event_id: eventId, rule: 'QUIET_HOURS_BYPASS' })
+      .select('channel', 'outcome', 'created_at');
+    expect(stored.map((d: { channel: string }) => d.channel).sort()).toEqual(['push', 'sms']);
+  });
+
+  let dndUser = '';
+  it('DND blocks promotional SMS to a FULLY_BLOCKED number', async () => {
+    const phone = uniquePhone();
+    dndUser = await createUser(s.c, {
+      contacts: [
+        { channel: 'sms', value: phone },
+        { channel: 'email', value: `dnd-${Date.now()}@example.test` },
+        { channel: 'push', value: `fcm-token-dnd-${Date.now()}-0000000000` },
+      ],
+    });
+    const imp = await api()
+      .post('/api/v1/compliance/dnd/imports')
+      .set(auth(admin))
+      .send({
+        source: 'e2e-synthetic',
+        registrySnapshotAt: new Date().toISOString(),
+        entries: [{ phone, status: 'FULLY_BLOCKED', blockedCategories: [] }],
+      });
+    expect(imp.status).toBe(201);
+    const consent = await api()
+      .post(`/api/v1/users/${dndUser}/consents`)
+      .set(auth(service))
+      .send({ channel: 'sms', purpose: 'PROMOTIONAL', status: 'GRANTED', source: 'API' });
+    expect(consent.status).toBe(201);
+    // SMS as the only intrusive channel, so cost optimisation cannot drop it before the DND check.
+    const prefs = await api()
+      .put(`/api/v1/users/${dndUser}/preferences/categories`)
+      .set(auth(service))
+      .send({ SIP: { enabled: true, channels: ['sms', 'inapp'] } });
+    expect(prefs.status).toBe(200);
+    const e = await processed(await submit(dndUser, 'SIPX-004', SAMPLE_PAYLOADS['SIPX-004']!));
+    expect(stateOf(e, 'sms')).toBe('DND');
+    expect(has(e, 'sms', 'CONSENT_EXPLICIT', 'ALLOW')).toBe(true);
+    expect(has(e, 'sms', 'DND_FULLY_BLOCKED', 'BLOCK')).toBe(true);
+  });
+
+  it('a mandatory margin call still reaches the DND-registered number by SMS', async () => {
+    const eventId = await submit(dndUser, 'RISK-001', SAMPLE_PAYLOADS['RISK-001']!);
+    const e = await waitFor(
+      () => eventStatus(eventId),
+      (x) => x.status === 'PROCESSED' && ['SENT', 'DELIVERED'].includes(stateOf(x, 'sms') ?? ''),
+      30000,
+    );
+    expect(has(e, 'sms', 'DND_NOT_APPLICABLE', 'ALLOW')).toBe(true);
+  });
+
+  it('caps the 4th MARKET alert within an hour (3 per category per hour)', async () => {
+    const userId = await createUser(s.c);
+    const ids: string[] = [];
+    for (const [i, symbol] of ['SBIN', 'TCS', 'HDFCBANK', 'WIPRO'].entries()) {
+      const id = await submit(userId, 'MKTX-001', {
+        ...SAMPLE_PAYLOADS['MKTX-001'],
+        alertId: `PA-E2E-${i}`,
+        symbol,
+        triggeredAt: new Date().toISOString(),
+      });
+      ids.push(id);
+      await processed(id); // sequential, so the cap order is deterministic
+    }
+    const first = await eventStatus(ids[0]!);
+    const fourth = await eventStatus(ids[3]!);
+    expect(stateOf(first, 'push')).not.toBe('CAPPED');
+    expect(stateOf(fourth, 'push')).toBe('CAPPED');
+    expect(stateOf(fourth, 'inapp')).toBe('SENT'); // in-app is never capped
+    expect(has(fourth, 'push', 'FREQUENCY_CAP_CATEGORY', 'CAP')).toBe(true);
+  });
+
+  it('schedules a transient failure in the Redis retry ZSET, then delivers', async () => {
+    const userId = await createUser(s.c);
+    const redis = s.c.redis();
+    const key = `${s.config.RABBITMQ_PREFIX}retry:schedule`;
+    const zadd = jest.spyOn(redis, 'zadd'); // records the call; Redis still receives it
+    try {
+      await api()
+        .post('/api/v1/ops/providers/mock-push/simulate')
+        .set(auth(admin))
+        .send({ mode: 'fail_transient', remaining: 1 })
+        .expect(200);
+      const eventId = await submit(userId, 'TXNX-005', SAMPLE_PAYLOADS['TXNX-005']!);
+      const ns = await waitFor(
+        () => notificationsOf(eventId),
+        (x) => x.find((n) => n.channel === 'push')?.state === 'DELIVERED',
+        30000,
+      );
+      const push = ns.find((n) => n.channel === 'push')!;
+      const call = zadd.mock.calls.find(
+        (c) => c[0] === key && (c[2] as string).includes(push.id),
+      ) as unknown as [string, number, string] | undefined;
+      expect(call).toBeDefined();
+      expect(JSON.parse(call![2])).toMatchObject({ id: push.id, channel: 'push', retry: 1 });
+      expect(call![1]).toBeGreaterThan(Date.now() - 60_000); // score = due time (epoch ms)
+      const history = (
+        await api().get(`/api/v1/notifications/${push.id}/history`).set(auth(operator))
+      ).body.items as { toState: string }[];
+      expect(history.map((h) => h.toState)).toEqual(
+        expect.arrayContaining(['RETRYING', 'SENT', 'DELIVERED']),
+      );
+      // Released members are removed from the set.
+      const left = await redis.zrange(key, 0, -1);
+      expect(left.some((m) => m.includes(push.id))).toBe(false);
+    } finally {
+      zadd.mockRestore();
+    }
+  });
+
+  it('analytics reflect these flows consistently (Redis counters and delivery rates)', async () => {
+    const rt = await waitFor(
+      async () =>
+        (await api().get('/api/v1/analytics/realtime?minutes=30').set(auth(operator))).body
+          .byChannel as Record<string, Record<string, number>>,
+      (b) => (b.sms?.dnd ?? 0) >= 1 && (b.push?.capped ?? 0) >= 1,
+      30000,
+    );
+    expect(rt.push!.delivered).toBeGreaterThanOrEqual(1);
+    type Rates = {
+      summary: { total_sent: number; total_delivered: number; overall_delivery_rate: number };
+      by_channel: Record<string, { sent: number; delivered: number; rate: number | null }>;
+      frequency_cap_hits: { total: number };
+      dnd_blocks: { total: number; promotional_blocked: number };
+    };
+    const r = await waitFor(
+      async () =>
+        (await api().get('/api/v1/analytics/delivery-rates?period=24h').set(auth(operator)))
+          .body as Rates,
+      (b) => b.dnd_blocks.promotional_blocked >= 1 && b.frequency_cap_hits.total >= 1,
+      30000,
+    );
+    const channels = Object.values(r.by_channel);
+    expect(channels.reduce((t, c) => t + c.delivered, 0)).toBe(r.summary.total_delivered);
+    expect(channels.reduce((t, c) => t + c.sent, 0)).toBe(r.summary.total_sent);
+    for (const c of channels) {
+      expect(c.delivered).toBeLessThanOrEqual(c.sent);
+      if (c.rate !== null) expect(c.rate).toBeCloseTo(c.delivered / c.sent, 3);
+    }
+    expect(r.summary.overall_delivery_rate).toBeCloseTo(
+      r.summary.total_delivered / r.summary.total_sent,
+      3,
+    );
   });
 });

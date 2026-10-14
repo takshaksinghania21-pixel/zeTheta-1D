@@ -93,7 +93,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply migrations
-        run: npx tsx src/infrastructure/database/migrate.ts latest
+        run: npx tsx src/database/migrate.ts latest
       - name: Unit + integration + e2e tests with coverage thresholds
         run: npm run test:coverage
       - uses: actions/upload-artifact@v4.6.2
@@ -131,13 +131,20 @@ jobs:
         with:
           context: .
           push: false
+          # Load into the local image store: the buildx docker-container builder keeps
+          # results only in its cache otherwise, and the checks below run the image.
+          load: true
           tags: zetheta-notification-engine:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Verify the image runs as a non-root user
+      - name: Verify the image runs as a non-root user and stays under 200 MB (PDF Day 14)
         run: |
-          docker build -q -t zetheta-notification-engine:ci .
           test "$(docker run --rm --entrypoint id zetheta-notification-engine:ci -u)" != "0"
+          # Unpacked filesystem size: `image inspect .Size` differs between the classic and
+          # containerd image stores (the latter also counts compressed blobs).
+          size_mb=$(docker run --rm -u 0 --entrypoint du zetheta-notification-engine:ci -sxm / | cut -f1)
+          echo "image filesystem: ${size_mb} MB"
+          test "$size_mb" -lt 200
 
   snyk:
     name: Snyk dependency scan (optional)

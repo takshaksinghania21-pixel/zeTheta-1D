@@ -1,9 +1,9 @@
-import { ManualClock } from '../../src/common/clock';
+import { ManualClock } from '../../src/utils/clock';
 import { Container } from '../../src/container';
-import { InMemoryMockBehaviorStore } from '../../src/infrastructure/providers/mock';
-import { InMemoryCircuitStore } from '../../src/modules/delivery/circuit-breaker';
-import { SAMPLE_PAYLOADS } from '../../src/modules/taxonomy/fixtures';
-import { loadTemplateSources } from '../../src/modules/templates/source';
+import { InMemoryMockBehaviorStore } from '../../src/delivery/providers/mock';
+import { InMemoryCircuitStore } from '../../src/delivery/circuit-breaker/circuit-breaker';
+import { SAMPLE_PAYLOADS } from '../../src/events/models/fixtures';
+import { loadTemplateSources } from '../../src/templates/definitions/source';
 import { migrate, truncateAll } from '../helpers/db';
 import { testConfig } from '../helpers/env';
 import { createUser } from '../helpers/stack';
@@ -81,6 +81,61 @@ describe('quiet hours scheduling (durable, restart-safe)', () => {
     expect((await c.notifications().require(push.id)).state).toBe('QUEUED');
     const job = await c.db()('scheduled_notifications').where({ notification_id: push.id }).first();
     expect(job.status).toBe('DONE');
+  });
+
+  it('classifies a digest of promotional SMS as PROMOTIONAL and DND-checks it at dispatch', async () => {
+    const userId = await nightUser();
+    await c.consents().record({
+      userId,
+      channel: 'sms',
+      purpose: 'PROMOTIONAL',
+      status: 'GRANTED',
+      source: 'APP',
+      recordedBy: 't',
+    });
+    await c
+      .users()
+      .updatePreferences(
+        userId,
+        (p) => ({ ...p, categories: { SIP: { channels: ['sms', 'inapp'] } } }),
+        't',
+      );
+    await c
+      .dndSource()
+      .import({ source: 'fixture', snapshotAt: clock.now(), importedBy: 't', entries: [] });
+    for (let i = 0; i < 6; i++)
+      await process(userId, 'SIPX-004', {
+        ...SAMPLE_PAYLOADS['SIPX-004'],
+        sipId: `SIP-PROMO-${i}`,
+      });
+    clock.set(MORNING_RELEASE);
+    await c.scheduler().runDue();
+    const digest = await c
+      .db()('notifications')
+      .where({ user_id: userId, is_digest: true })
+      .first();
+    expect(digest).toMatchObject({ channel: 'sms', regulatory_class: 'PROMOTIONAL' });
+    // The number is registered on DND between the digest being built and sent.
+    await c.dndSource().import({
+      source: 'fixture',
+      snapshotAt: clock.now(),
+      importedBy: 't',
+      entries: [
+        {
+          phoneHash: c.users().phoneHash('+919812345678'),
+          status: 'FULLY_BLOCKED',
+          blockedCategories: [],
+        },
+      ],
+    });
+    await c.dndCache().invalidateAll();
+    await c.dispatcher().handle({
+      notificationId: digest.id,
+      createdAt: new Date(digest.created_at).toISOString(),
+      retry: 0,
+      correlationId: digest.correlation_id,
+    });
+    expect((await c.notifications().require(digest.id)).state).toBe('DND');
   });
 
   it('folds more than five deferred notifications into one morning digest', async () => {
@@ -179,6 +234,61 @@ describe('quiet hours scheduling (durable, restart-safe)', () => {
     expect(history.find((h) => h.to_state === 'QUEUED')).toMatchObject({
       reason: 'QUIET_HOURS_BYPASS',
     });
+  });
+});
+
+describe('capped notifications (Appendix B: next window, digest when 3+)', () => {
+  const alert = (userId: string, i: number) =>
+    process(userId, 'MKTX-001', {
+      ...SAMPLE_PAYLOADS['MKTX-001'],
+      alertId: `CAP-${i}`,
+      symbol: `CAP${i}`,
+    });
+  const pushStates = async (userId: string) =>
+    (await c
+      .db()('notifications')
+      .where({ user_id: userId, channel: 'push', is_digest: false })) as {
+      state: string;
+      next_attempt_at: Date | null;
+      digest_id: string | null;
+    }[];
+
+  it('records the cap with a scheduled time and batches 3+ capped events into one digest', async () => {
+    const userId = await createUser(c);
+    clock.set('2026-01-15T09:05:00Z');
+    for (let i = 0; i < 6; i++) await alert(userId, i); // category cap: 3 per hour
+    const capped = (await pushStates(userId)).filter((n) => n.state === 'CAPPED');
+    expect(capped).toHaveLength(3);
+    expect(
+      capped.every(
+        (n) => new Date(n.next_attempt_at!).toISOString() === '2026-01-15T10:00:00.000Z',
+      ),
+    ).toBe(true);
+    clock.set('2026-01-15T10:00:00Z');
+    await c.scheduler().runDue();
+    const after = await pushStates(userId);
+    expect(after.filter((n) => n.state === 'DIGESTED')).toHaveLength(3);
+    const digest = await c
+      .db()('notifications')
+      .where({ user_id: userId, is_digest: true })
+      .first();
+    expect(digest).toMatchObject({ state: 'QUEUED' });
+    expect(
+      after.filter((n) => n.state === 'DIGESTED').every((n) => n.digest_id === digest.id),
+    ).toBe(true);
+  });
+
+  it('releases fewer than 3 capped events individually once the caps allow', async () => {
+    const userId = await createUser(c);
+    clock.set('2026-01-15T09:05:00Z');
+    for (let i = 0; i < 5; i++) await alert(userId, i);
+    expect((await pushStates(userId)).filter((n) => n.state === 'CAPPED')).toHaveLength(2);
+    clock.set('2026-01-15T10:06:00Z'); // the rolling category hour has passed
+    await c.scheduler().runDue();
+    expect((await pushStates(userId)).filter((n) => n.state === 'QUEUED')).toHaveLength(5);
+    expect(await c.db()('notifications').where({ user_id: userId, is_digest: true })).toHaveLength(
+      0,
+    );
   });
 });
 

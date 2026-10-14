@@ -35,6 +35,8 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
   DATABASE_SSL: bool.default(false),
+  /** CA (or self-signed server certificate) used to verify PostgreSQL TLS. */
+  DATABASE_SSL_CA_FILE: optionalString,
 
   REDIS_URL: z.string().min(1),
 

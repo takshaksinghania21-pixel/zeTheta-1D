@@ -4,7 +4,7 @@ sprintf-js  *
 Severity: moderate
 sprintf-js vulnerable to denial of service through unbounded precision specifiers - https://github.com/advisories/GHSA-hp3w-g68c-fv3c
 fix available via `npm audit fix --force`
-Will install ts-jest@27.0.3, which is a breaking change
+Will install ts-jest@29.1.2, which is a breaking change
 node_modules/sprintf-js
   argparse  1.0.0 - 1.0.10
   Depends on vulnerable versions of sprintf-js

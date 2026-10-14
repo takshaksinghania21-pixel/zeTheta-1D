@@ -8,10 +8,16 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { PRIORITY_NUMBER } from '../src/api/pdf-contract';
-import { EventTaxonomy } from '../src/modules/taxonomy/taxonomy';
-import { SAMPLE_PAYLOADS } from '../src/modules/taxonomy/fixtures';
-import { LANGUAGE_WEIGHTS, pick, prng, quota, syntheticUser } from './synthetic';
+import { PRIORITY_NUMBER } from '../src/api/validators/pdf-contract';
+import { EventTaxonomy } from '../src/events/models/taxonomy';
+import { SAMPLE_PAYLOADS } from '../src/events/models/fixtures';
+import {
+  LANGUAGE_WEIGHTS,
+  pick,
+  prng,
+  quota,
+  syntheticUser,
+} from '../src/database/seeds/synthetic';
 
 type Row = Record<string, string | number | boolean>;
 

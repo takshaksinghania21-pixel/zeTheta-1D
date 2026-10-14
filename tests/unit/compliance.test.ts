@@ -1,11 +1,7 @@
-import { ManualClock } from '../../src/common/clock';
+import { ManualClock } from '../../src/utils/clock';
 import { loadPolicy } from '../../src/config/policy';
-import {
-  evaluateConsent,
-  latestConsents,
-  type ConsentState,
-} from '../../src/modules/compliance/consent';
-import { DndService, InMemoryDndCache, evaluateDnd } from '../../src/modules/compliance/dnd';
+import { evaluateConsent, latestConsents, type ConsentState } from '../../src/compliance/consent';
+import { DndService, InMemoryDndCache, evaluateDnd } from '../../src/compliance/dnd/dnd';
 import { FakeDndSource } from '../helpers/routing';
 
 const policy = loadPolicy();
@@ -217,7 +213,7 @@ describe('DND lookup and evaluation', () => {
 
 describe('DLQ classification (PDF Day 9)', () => {
   it('classifies failures as transient, permanent or configuration', async () => {
-    const { classifyFailure } = await import('../../src/modules/dlq/repository');
+    const { classifyFailure } = await import('../../src/delivery/dlq/repository');
     expect(classifyFailure('RETRIES_EXHAUSTED', [{ error_kind: 'TIMEOUT' }])).toBe('TRANSIENT');
     expect(classifyFailure('RETRIES_EXHAUSTED', [{ error_kind: 'AUTH' }])).toBe('CONFIGURATION');
     expect(classifyFailure('TEMPLATE_ERROR')).toBe('CONFIGURATION');

@@ -1,21 +1,26 @@
 # Deployment Guide
 
-> **Verification status.** The application, migrations, workers and full test
-> suite were verified against locally installed PostgreSQL 16, Redis 8, Kafka 4.3
-> and RabbitMQ 4.3 (macOS host). **Docker was not available on the authoring
-> machine**, so `Dockerfile`, `docker-compose.yml` and `docker-compose.test.yml`
-> are written and statically validated (YAML parses, services/images pinned) but
-> were **not built or started**. The CI workflow builds the image on every push.
+> **Verification status (2026-10-12).** The Compose stack was built and run on
+> Docker Desktop 29.8.2 / Compose v5.5.1 (macOS, arm64): image built (Node
+> 20.19.6, non-root, 183 MB unpacked), all 11 long-running services healthy,
+> migrations + seed over verified TLS, smoke test 15/15 and 7 additional
+> functional checks against the containers, graceful shutdown and a full
+> stop/start cycle. PostgreSQL TLS was verified on the Compose PostgreSQL
+> (trusted CA accepted; plaintext, untrusted CA and wrong host name rejected). The
+> full test suite also ran on Node 20.19.6 in a container against
+> `docker-compose.test.yml`. **Not verified:** the GitHub Actions workflow (the
+> repository has not been pushed), x86-64 images, and real provider sandboxes.
+> Details and commands: docs/IMPLEMENTATION_STATUS.md, Phase 9.
 
 ## 1. Prerequisites
 
-| Component  | Version used/pinned                                           | Notes                                                                          |
-| ---------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Node.js    | 20.19.6 in Docker/CI (assignment); verified locally on 26.8.2 | Node 20 reached end-of-life on 2026-04-30 — plan an upgrade to the current LTS |
-| PostgreSQL | 16.15                                                         | `gen_random_uuid()` (core since 13), declarative partitioning                  |
-| Redis      | 7.4.11 (compose), 8.10 (verified locally)                     | `noeviction` policy required (caps/rate limits must not be evicted)            |
-| Kafka      | 4.3.1 (KRaft, no ZooKeeper)                                   | `auto.create.topics.enable=false`; topics created by the app                   |
-| RabbitMQ   | 4.3.6                                                         | classic queues with `x-max-priority`                                           |
+| Component  | Version used/pinned                                                                 | Notes                                                                          |
+| ---------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Node.js    | 20.19.6 in Docker/CI (assignment); verified locally on 26.8.2                       | Node 20 reached end-of-life on 2026-04-30 — plan an upgrade to the current LTS |
+| PostgreSQL | 16.15                                                                               | `gen_random_uuid()` (core since 13), declarative partitioning                  |
+| Redis      | 7.4.11 (compose), 8.10 (verified locally)                                           | `noeviction` policy required (caps/rate limits must not be evicted)            |
+| Kafka      | Confluent 7.5.0 + ZooKeeper (compose, PDF Appendix C); 4.3.1 KRaft verified locally | `auto.create.topics.enable=false`; topics created by the app                   |
+| RabbitMQ   | 4.3.6                                                                               | classic queues with `x-max-priority`                                           |
 
 ## 2. Configuration checklist
 
@@ -28,12 +33,15 @@ Copy `.env.example` → `.env` (or your secret manager) and set:
 - [ ] `PUBLIC_BASE_URL` (used for Twilio callback URLs/signature validation), `CORS_ORIGINS` (no `*`), `TRUST_PROXY` (hop count behind the load balancer).
 - [ ] Connection URLs with TLS where available (`DATABASE_SSL=true`, `amqps://`, `rediss://`, `KAFKA_SSL=true` + SASL).
 - [ ] Review `config/notification-policy.yaml` and `config/event-taxonomy.yaml` with compliance (see SECURITY.md §2).
+- [ ] PostgreSQL TLS for Compose: run `scripts/dev-certs.sh` once (writes a self-signed
+      server certificate to `.local/certs/`, git-ignored). The app verifies it via
+      `DATABASE_SSL_CA_FILE`; in production use a CA-issued certificate.
 
 ## 3. Database migration procedure
 
 ```bash
 # compiled image
-node dist/src/infrastructure/database/migrate.js latest
+node dist/src/database/migrate.js latest
 # from source
 npm run migrate
 ```
@@ -47,22 +55,38 @@ every 6 hours; alert if `notifications_default` receives rows.
 ## 4. Starting the services
 
 ```bash
-docker compose up -d --build          # full stack (unverified locally, see banner)
-docker compose ps                     # all services healthy?
+scripts/dev-certs.sh                  # once; refuses to overwrite an existing certificate
+docker compose up -d --build --wait   # full stack; returns when every service is healthy
+docker compose ps                     # migrate: Exited (0); everything else (healthy)
 curl -fsS localhost:3000/health/ready # {"status":"ready","checks":{...all up}}
 ```
 
+`.env` must provide `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `RABBITMQ_PASSWORD`
+(Compose refuses to start otherwise). To keep them out of `.env`, or when host
+ports 5432/6379/9092/15672 are taken by local services, put them in a second
+git-ignored file and pass both:
+`docker compose --env-file .env --env-file .local/compose.env up -d --build --wait`
+(host ports: `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, `KAFKA_HOST_PORT`,
+`RABBITMQ_MGMT_HOST_PORT`, `APP_HOST_PORT`). With `SEED=true` and the `SEED_*`
+passwords set, the `migrate` service also seeds. Smoke test against the stack:
+`SEED_CREDENTIALS_FILE=<file with those credentials> npm run smoke`.
+
+`docker compose stop` keeps all data; `docker compose down` removes containers
+but keeps the named volumes; only `down -v` deletes data.
+
 Without Docker (verified path): see README §"Run without Docker".
 
-Process roles (scale independently):
+Process roles (scale independently; Compose services `app`, `worker-events`,
+`worker-critical`, `worker-dispatch` × 2, `worker-analytics`):
 
 | Role                   | Command                                                                                 | Scaling                                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | API                    | `node dist/src/server.js`                                                               | stateless; ≥2 behind a load balancer (Socket.IO uses the Redis adapter; enable sticky sessions or websocket-only transport) |
-| Event consumer         | `node dist/src/workers/main.js event-consumer`                                          | ≤ number of `financial-events.v1` partitions                                                                                |
+| Event consumer         | `node dist/src/workers/main.js event-consumer`                                          | ≤ number of `notification-events` partitions                                                                                |
+| Critical consumer      | `... critical-consumer`                                                                 | own topic `notification-critical` and consumer group; run separately so bulk traffic cannot delay it                        |
 | Dispatcher             | `node dist/src/workers/main.js dispatcher` (`DISPATCH_CHANNELS=sms,push` to specialise) | horizontally; prefetch via `RABBITMQ_PREFETCH`                                                                              |
 | Outbox relay           | `... outbox-relay`                                                                      | ≥1 (SKIP LOCKED makes several safe; ordering across relays is not guaranteed)                                               |
-| Scheduler              | `... scheduler`                                                                         | ≥1 (SKIP LOCKED)                                                                                                            |
+| Scheduler              | `... scheduler`                                                                         | ≥1 (SKIP LOCKED; also moves due Redis ZSET retries)                                                                         |
 | Analytics / DLQ ingest | `... analytics`, `... dlq-ingest`                                                       | 1–2                                                                                                                         |
 
 ## 5. Secrets management
@@ -95,20 +119,24 @@ Process roles (scale independently):
 
 ## 8. Monitoring and alerts
 
-Prometheus metrics (selection) and suggested alerts:
+Metric names follow PDF §A11.1; the seven §A11.2 alerts are defined in
+[`config/prometheus-alerts.yml`](config/prometheus-alerts.yml) (parsed and checked
+by `tests/unit/alert-rules.test.ts`; never loaded into a running Prometheus).
 
-| Metric                                                  | Alert                                              |
-| ------------------------------------------------------- | -------------------------------------------------- |
-| `dlq_open_entries`                                      | > 0 for 15 min (page for CRITICAL channel entries) |
-| `kafka_consumer_lag{group=…event-consumer}`             | > 1000 for 5 min                                   |
-| `outbox_backlog`                                        | > 500 for 5 min (broker down / relay stuck)        |
-| `provider_circuit_state`                                | == 2 (open) for 5 min                              |
-| `rabbitmq_queue_depth{queue=…delivery.sms}`             | growing for 10 min                                 |
-| `notification_send_latency_seconds` (p95, CRITICAL)     | > latency objective (10 s for margin calls)        |
-| `webhooks_received_total{outcome="rejected_signature"}` | rate > 0 (misconfiguration or attack)              |
-| `rate_limit_rejections_total`                           | sudden spikes                                      |
-| `frequency_cap_hits_total`                              | trend review                                       |
-| `events_processed_total{outcome="failed"}`              | > 0                                                |
+| Alert (§A11.2)           | Expression (summary)                                              |
+| ------------------------ | ----------------------------------------------------------------- |
+| `HighDLQDepth`           | `notification_dlq_depth > 100`                                    |
+| `ProviderCircuitOpen`    | `delivery_provider_circuit_state == 2`                            |
+| `DeliveryLatencySpike`   | CRITICAL p99 `notification_delivery_latency_seconds` > 30 s (5 m) |
+| `HighFailureRate`        | non-success / total `notification_delivery_total` > 5 % (10 m)    |
+| `KafkaConsumerLag`       | `sum by (topic, consumer_group) (kafka_consumer_lag) > 10000`     |
+| `FrequencyCapExhaustion` | cap hits / accepted events > 50 % for 30 m                        |
+| `DNDViolationDetected`   | `notification_dnd_violations > 0`                                 |
+
+Also useful: `outbox_backlog` (broker down / relay stuck),
+`notification_retry_queue_depth`, `rabbitmq_queue_depth`,
+`webhooks_received_total{outcome="rejected_signature"}`,
+`rate_limit_rejections_total`, `events_processed_total{outcome="failed"}`.
 
 Logs are JSON on stdout (ISO timestamp, level, service, component,
 correlationId); ship them to your log platform and index `correlationId`.
@@ -119,21 +147,24 @@ correlationId); ship them to your log platform and index `correlationId`.
   test restores regularly. Old monthly partitions can be detached/archived
   after the retention scrub.
 - Redis holds reconstructible short-lived state (caps, circuits, rate limits,
-  caches). Losing it resets frequency caps for up to 24 h — acceptable but
-  enable AOF to avoid it.
-- Kafka retains `financial-events.v1` for 7 days, `notification-lifecycle.v1`
-  for 3 days (replay window). RabbitMQ queues are durable; the sweeper
-  re-enqueues stale work if queues are lost.
+  caches, retry ZSET, real-time counters, engagement features). Losing it resets
+  frequency caps for up to 24 h and engagement history — enable AOF. While Redis is
+  down, routing fails closed (events are retried, not sent unchecked).
+- Kafka retains `notification-events` and `notification-critical` for 7 days,
+  `notification-lifecycle` for 3 days and `notification-dlq` for 30 days (replay
+  window). RabbitMQ queues are durable; the scheduler's sweep re-enqueues stale
+  work if queues are lost. Pending retries live in a Redis ZSET **and** in
+  `notifications.next_attempt_at`, so a lost Redis is recovered by the sweep.
 
 ## 10. Production-readiness limitations
 
 Not production-ready as delivered. Remaining work:
 
-1. Build and run the Docker images; run the CI workflow on GitHub (never
-   executed — no remote repository was created).
+1. Run the CI workflow on GitHub (never executed — the repository has not been
+   pushed); the Compose stack was validated locally on arm64 only.
 2. Real provider sandboxes (Twilio test creds, Ethereal, Firebase project,
    Meta test number) were not exercised; adapters were verified against local
-   HTTP/SMTP stubs.
+   HTTP/SMTP stubs. APNs is not implemented (iOS push goes through FCM).
 3. Single-broker Kafka/RabbitMQ only; replication factors, quorum queues, TLS
    and SASL on all hops need production configuration.
 4. Load tests were run on one laptop with all roles in one process

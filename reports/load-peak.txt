@@ -1,0 +1,17 @@
+scenario=peak duration=60s scale=1 since=2026-10-11T20:55:50.000Z ingest_s=60 drained_s=152 pending_at_end=0
+http_req_duration
+http_req_failed
+events_accepted................: 13861 230.896123/s
+http_req_duration..............: avg=2.26ms min=554µs    med=1.72ms p(90)=3.63ms p(95)=4.66ms p(99)=8.6ms  max=99.62ms
+http_req_failed................: 0.00% 0 out of 13862
+iterations.....................: 13861 230.896123/s
+ event_type | events | processed | proc_p50_ms | proc_p95_ms | proc_p99_ms 
+------------+--------+-----------+-------------+-------------+-------------
+ TXNX-001   |  13861 |     13861 |       16711 |       33325 |       35929
+
+ priority | channel | notifications | sent  | capped | e2e_p50_ms | e2e_p95_ms | e2e_p99_ms 
+----------+---------+---------------+-------+--------+------------+------------+------------
+ HIGH     | email   |         13861 | 13861 |      0 |      20121 |     110010 |     118017
+ HIGH     | inapp   |         13861 | 13861 |      0 |      16719 |      33336 |      35942
+ HIGH     | push    |         13861 | 13861 |      0 |      19932 |     110470 |     118413
+

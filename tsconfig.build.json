@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "types": ["node"], "sourceMap": false },
-  "include": ["src/**/*.ts", "scripts/seed.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["tests", "**/*.test.ts"]
 }

@@ -24,6 +24,10 @@ const QUERIES: Record<string, string> = {
     FROM notifications
     WHERE event_type = 'TXNX-001' AND created_at >= now() - interval '1 day'
     GROUP BY 1`,
+  'Last 15 minutes by channel (narrow time range: index on created_at / BRIN)': `
+    SELECT channel, count(*) FROM notifications
+    WHERE created_at >= now() - interval '15 minutes'
+    GROUP BY 1`,
   'Same report from the hourly aggregate maintained by the analytics consumer (CQRS read model)': `
     SELECT date_trunc('day', bucket) AS day, channel,
            sum(value) FILTER (WHERE metric = 'sent')      AS sent,

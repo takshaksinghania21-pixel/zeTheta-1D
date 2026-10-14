@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-11T14:07:53.698Z",
+  "runAt": "2026-10-12T08:23:08.024Z",
   "baseUrl": "http://localhost:3000",
   "passed": 15,
   "failed": 0,
@@ -10,9 +10,9 @@
       "ok": true,
       "detail": {
         "status": 201,
-        "userId": "83191e8f-13c3-4edd-b5c4-6a60d6ac9d43"
+        "userId": "8d6822e9-d5ed-4289-9535-39973928b091"
       },
-      "ms": 16
+      "ms": 9
     },
     {
       "step": 2,
@@ -37,17 +37,17 @@
           "locale": "SYSTEM"
         }
       },
-      "ms": 10
+      "ms": 8
     },
     {
       "step": 3,
       "name": "Submit a valid financial event (202 Accepted)",
       "ok": true,
       "detail": {
-        "eventId": "574768ec-d695-416c-a365-8ec418c7384a",
+        "eventId": "c2bf1abe-c18e-41a3-98f5-8f3b837d17c7",
         "status": "ACCEPTED",
-        "idempotencyKey": "TXNX-001:83191e8f-13c3-4edd-b5c4-6a60d6ac9d43:SMOKE-57f044cd-1",
-        "statusUrl": "/api/v1/events/574768ec-d695-416c-a365-8ec418c7384a"
+        "idempotencyKey": "TXNX-001:8d6822e9-d5ed-4289-9535-39973928b091:SMOKE-a0ab1140-1",
+        "statusUrl": "/api/v1/events/c2bf1abe-c18e-41a3-98f5-8f3b837d17c7"
       },
       "ms": 4
     },
@@ -57,9 +57,9 @@
       "ok": true,
       "detail": {
         "status": "PROCESSED",
-        "notifications": 3
+        "notifications": 4
       },
-      "ms": 510
+      "ms": 511
     },
     {
       "step": 5,
@@ -67,27 +67,30 @@
       "ok": true,
       "detail": {
         "transactional": [
+          "sms:DND_NOT_APPLICABLE:ALLOW",
           "push:CONSENT_IMPLIED:ALLOW",
           "email:CONSENT_IMPLIED:ALLOW",
-          "inapp:CONSENT_IMPLIED:ALLOW",
-          "-:FREQUENCY_CAP_EXEMPT:ALLOW"
+          "sms:REGULATORY_MANDATORY_CHANNEL:OVERRIDE",
+          "sms:CONSENT_IMPLIED:ALLOW",
+          "-:FREQUENCY_CAP_EXEMPT:ALLOW",
+          "inapp:CONSENT_IMPLIED:ALLOW"
         ],
         "promotionalDryRun": [
-          "PROMOTIONAL_CONSENT_REQUIRED",
           "PROMOTIONAL_CONSENT_REQUIRED",
           "CONSENT_IMPLIED"
         ]
       },
-      "ms": 5
+      "ms": 8
     },
     {
       "step": 6,
-      "name": "Templates rendered per channel",
+      "name": "Templates rendered per channel (SMS forced by the SEBI mandate)",
       "ok": true,
       "detail": [
-        "push: Buy order executed: INFY",
-        "email: Buy order executed: INFY",
-        "inapp: Buy order executed: INFY"
+        "push: Bought 10 INFY @ ₹1,520.50 on NSE. Order",
+        "email: Hi Smoke Tester,\n\nYour buy order SMOKE-a",
+        "inapp: Bought 10 INFY @ ₹1,520.50 on NSE. Order",
+        "sms: Bought 10 INFY @ Rs.1,520.50 on NSE. Ord"
       ],
       "ms": 0
     },
@@ -98,9 +101,10 @@
       "detail": [
         "push:DELIVERED:mock-push",
         "email:DELIVERED:mock-email",
-        "inapp:SENT:socketio"
+        "inapp:SENT:socketio",
+        "sms:DELIVERED:mock-sms-primary"
       ],
-      "ms": 9
+      "ms": 5
     },
     {
       "step": 8,
@@ -110,18 +114,19 @@
         "states": [
           "push:DELIVERED",
           "email:DELIVERED",
-          "inapp:SENT"
+          "inapp:SENT",
+          "sms:DELIVERED"
         ],
         "delivery": {
-          "notificationId": "19c502f6-ff3e-4485-81b2-17d428a1d414",
+          "notificationId": "630fdcf5-bbcc-42e7-9447-b80256edbe46",
           "state": "DELIVERED",
           "provider": "mock-push",
-          "providerMessageId": "mock-push-0e7de1ca-040f-4cb3-af56-01035cad7b15",
+          "providerMessageId": "mock-push-e924e4f8-6704-4aa2-9cfa-0cfae7d3b03b",
           "providerStatus": {
             "status": "DELIVERED"
           },
           "lastAttempt": {
-            "id": "2e606cf5-341a-49ec-8e57-7246e29d0c83",
+            "id": "ccea7299-be7a-430e-9483-3f41a6e102a5",
             "attemptNumber": 1,
             "provider": "mock-push",
             "channel": "push",
@@ -129,22 +134,22 @@
             "errorKind": null,
             "errorCode": null,
             "errorMessage": null,
-            "providerMessageId": "mock-push-0e7de1ca-040f-4cb3-af56-01035cad7b15",
+            "providerMessageId": "mock-push-e924e4f8-6704-4aa2-9cfa-0cfae7d3b03b",
             "costMicros": 0,
-            "startedAt": "2026-10-11T14:06:58.823Z",
-            "completedAt": "2026-10-11T14:06:58.826Z",
-            "latencyMs": 1
+            "startedAt": "2026-10-12T08:21:40.508Z",
+            "completedAt": "2026-10-12T08:21:40.509Z",
+            "latencyMs": 0
           }
         }
       },
-      "ms": 7
+      "ms": 6
     },
     {
       "step": 9,
       "name": "State history recorded",
       "ok": true,
       "detail": "CREATED > ENRICHED > ROUTED > QUEUED > SENT > DELIVERED",
-      "ms": 3
+      "ms": 4
     },
     {
       "step": 10,
@@ -157,7 +162,7 @@
           "remaining": 2
         }
       },
-      "ms": 8
+      "ms": 7
     },
     {
       "step": 11,
@@ -172,7 +177,7 @@
         ],
         "history": "CREATED>ENRICHED>ROUTED>QUEUED>RETRYING>RETRYING>SENT>DELIVERED"
       },
-      "ms": 4578
+      "ms": 5580
     },
     {
       "step": 12,
@@ -182,10 +187,10 @@
         "state": "DLQ",
         "retryCount": 5,
         "dlq": {
-          "id": "84e6cb9c-783b-4d2b-af8b-b8e72081df6f",
+          "id": "48bce0d7-e2d4-4015-bde8-5ea2840fe6e8",
           "source": "DELIVERY",
-          "notificationId": "2f76b8cc-df68-4c06-b8ba-1c31a3113dc4",
-          "eventId": "026f1fa7-9313-4f02-86dc-4f54e0386992",
+          "notificationId": "234d6ca5-9e75-4e29-9869-e461fd8d0356",
+          "eventId": "bf0c2cc0-0dbf-4832-89db-dcecb625b012",
           "channel": "email",
           "reasonCode": "RETRIES_EXHAUSTED",
           "reasonMessage": "Delivery failed after 5 retries: NO_PROVIDER_AVAILABLE",
@@ -196,7 +201,7 @@
               "provider": "mock-email",
               "error_code": "MOCK_503",
               "error_kind": "TRANSIENT",
-              "started_at": "2026-10-11T14:07:03.970Z",
+              "started_at": "2026-10-12T08:21:46.568Z",
               "attempt_number": 1
             },
             {
@@ -204,7 +209,7 @@
               "provider": "mock-email",
               "error_code": "MOCK_503",
               "error_kind": "TRANSIENT",
-              "started_at": "2026-10-11T14:07:05.721Z",
+              "started_at": "2026-10-12T08:21:48.695Z",
               "attempt_number": 2
             },
             {
@@ -212,7 +217,7 @@
               "provider": "mock-email",
               "error_code": "MOCK_503",
               "error_kind": "TRANSIENT",
-              "started_at": "2026-10-11T14:07:08.182Z",
+              "started_at": "2026-10-12T08:21:51.697Z",
               "attempt_number": 3
             },
             {
@@ -220,7 +225,7 @@
               "provider": "mock-email",
               "error_code": "MOCK_503",
               "error_kind": "TRANSIENT",
-              "started_at": "2026-10-11T14:07:12.538Z",
+              "started_at": "2026-10-12T08:21:56.706Z",
               "attempt_number": 4
             },
             {
@@ -228,26 +233,27 @@
               "provider": "mock-email",
               "error_code": "MOCK_503",
               "error_kind": "TRANSIENT",
-              "started_at": "2026-10-11T14:07:21.289Z",
+              "started_at": "2026-10-12T08:22:05.713Z",
               "attempt_number": 5
             }
           ],
           "payload": {
             "channel": "email",
             "priority": "HIGH",
-            "createdAt": "2026-10-11T14:07:03.950Z",
+            "createdAt": "2026-10-12T08:21:46.530Z",
             "eventType": "TXNX-001",
-            "notificationId": "2f76b8cc-df68-4c06-b8ba-1c31a3113dc4"
+            "notificationId": "234d6ca5-9e75-4e29-9869-e461fd8d0356"
           },
           "status": "OPEN",
           "resolvedBy": null,
           "resolvedAt": null,
           "resolutionNote": null,
-          "createdAt": "2026-10-11T14:07:37.804Z",
-          "updatedAt": "2026-10-11T14:07:37.804Z"
+          "createdAt": "2026-10-12T08:22:22.730Z",
+          "updatedAt": "2026-10-12T08:22:22.730Z",
+          "classification": "TRANSIENT"
         }
       },
-      "ms": 34239
+      "ms": 37294
     },
     {
       "step": 13,
@@ -256,9 +262,9 @@
       "detail": {
         "discardAsOperator": 403,
         "retry": "RETRIED",
-        "finalState": "DELIVERED"
+        "finalState": "SENT"
       },
-      "ms": 14118
+      "ms": 42314
     },
     {
       "step": 14,
@@ -267,21 +273,33 @@
       "detail": {
         "delivery": [
           {
-            "channel": "email",
-            "queued": 4,
-            "sent": 3,
-            "delivered": 3,
+            "channel": "push",
+            "queued": 89159,
+            "sent": 89136,
+            "delivered": 89129,
             "failed": 0,
-            "dlq": 1,
-            "retries": 6,
-            "acceptanceRate": 0.75,
+            "dlq": 23,
+            "retries": 49708,
+            "acceptanceRate": 0.9997,
+            "deliveryRate": 0.9999,
+            "failureRate": 0.0003
+          },
+          {
+            "channel": "sms",
+            "queued": 6,
+            "sent": 6,
+            "delivered": 6,
+            "failed": 0,
+            "dlq": 0,
+            "retries": 0,
+            "acceptanceRate": 1,
             "deliveryRate": 1,
-            "failureRate": 0.25
+            "failureRate": 0
           },
           {
             "channel": "inapp",
-            "queued": 3,
-            "sent": 3,
+            "queued": 91677,
+            "sent": 91677,
             "delivered": 0,
             "failed": 0,
             "dlq": 0,
@@ -291,40 +309,40 @@
             "failureRate": 0
           },
           {
-            "channel": "push",
-            "queued": 3,
-            "sent": 3,
-            "delivered": 3,
+            "channel": "email",
+            "queued": 81478,
+            "sent": 81443,
+            "delivered": 81434,
             "failed": 0,
-            "dlq": 0,
-            "retries": 2,
-            "acceptanceRate": 1,
-            "deliveryRate": 1,
-            "failureRate": 0
+            "dlq": 35,
+            "retries": 46064,
+            "acceptanceRate": 0.9996,
+            "deliveryRate": 0.9999,
+            "failureRate": 0.0004
           }
         ],
         "latency": [
           {
             "channel": "email",
-            "samples": 3,
+            "samples": 81443,
             "sendLatencyMs": {
-              "p50": 29,
-              "p95": 42626,
-              "p99": 46412.4
+              "p50": 23,
+              "p95": 170813.4,
+              "p99": 262841.08
             },
             "deliveryLatencyMs": {
-              "p50": 279,
-              "p95": 42875.1,
-              "p99": 46661.42
+              "p50": 271,
+              "p95": 170985.55,
+              "p99": 263090.43
             }
           },
           {
             "channel": "inapp",
-            "samples": 3,
+            "samples": 91677,
             "sendLatencyMs": {
-              "p50": 19,
-              "p95": 19.9,
-              "p99": 19.98
+              "p50": 13,
+              "p95": 54,
+              "p99": 173
             },
             "deliveryLatencyMs": {
               "p50": null,
@@ -334,21 +352,35 @@
           },
           {
             "channel": "push",
-            "samples": 3,
+            "samples": 89136,
             "sendLatencyMs": {
-              "p50": 34,
-              "p95": 3305.5,
-              "p99": 3596.3
+              "p50": 25,
+              "p95": 164239.25,
+              "p99": 262104.65
             },
             "deliveryLatencyMs": {
-              "p50": 309,
-              "p95": 3558.9,
-              "p99": 3847.78
+              "p50": 274,
+              "p95": 164443,
+              "p99": 262329.16
+            }
+          },
+          {
+            "channel": "sms",
+            "samples": 6,
+            "sendLatencyMs": {
+              "p50": 28.5,
+              "p95": 32.75,
+              "p99": 32.95
+            },
+            "deliveryLatencyMs": {
+              "p50": 278,
+              "p95": 289.5,
+              "p99": 292.3
             }
           }
         ]
       },
-      "ms": 7
+      "ms": 468
     },
     {
       "step": 15,
@@ -357,10 +389,10 @@
       "detail": {
         "duplicate": 200,
         "conflictingPayload": 409,
-        "before": 3,
-        "after": 3
+        "before": 4,
+        "after": 4
       },
-      "ms": 1514
+      "ms": 1517
     }
   ]
 }

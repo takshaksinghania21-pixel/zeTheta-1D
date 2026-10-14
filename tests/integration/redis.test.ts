@@ -1,12 +1,15 @@
 import type { Redis } from 'ioredis';
 import { loadPolicy } from '../../src/config/policy';
 import { createRedis } from '../../src/infrastructure/redis/redis';
-import { RedisFrequencyCapper } from '../../src/modules/frequency/frequency-capper';
-import { RedisRateLimiter } from '../../src/common/rate-limiter';
-import { RedisCircuitStore } from '../../src/modules/delivery/redis-circuit-store';
-import { CircuitBreaker, InMemoryCircuitStore } from '../../src/modules/delivery/circuit-breaker';
-import { RedisDndCache } from '../../src/modules/compliance/redis-dnd-cache';
-import { RedisMockBehaviorStore } from '../../src/infrastructure/providers/mock';
+import { RedisFrequencyCapper } from '../../src/compliance/frequency-cap/frequency-capper';
+import { RedisRateLimiter } from '../../src/utils/rate-limiter';
+import { RedisCircuitStore } from '../../src/delivery/circuit-breaker/redis-circuit-store';
+import {
+  CircuitBreaker,
+  InMemoryCircuitStore,
+} from '../../src/delivery/circuit-breaker/circuit-breaker';
+import { RedisDndCache } from '../../src/compliance/dnd/redis-dnd-cache';
+import { RedisMockBehaviorStore } from '../../src/delivery/providers/mock';
 import { capperContract } from '../helpers/capper-contract';
 import { testConfig } from '../helpers/env';
 
@@ -191,5 +194,46 @@ describe('Redis DND cache and mock behaviour store', () => {
     expect(await store.get('q')).toEqual({ mode: 'timeout', remaining: null });
     await store.set('q', { mode: 'ok', remaining: null });
     expect(await store.consume('q')).toBe('ok');
+  });
+});
+
+describe('FeatureStore (Redis real-time counters and engagement)', () => {
+  it('counts lifecycle transitions per minute/channel and per-user engagement', async () => {
+    const { FeatureStore } = await import('../../src/analytics/feature-store');
+    const fs = new FeatureStore(redis);
+    const userId = `fs-user-${Date.now()}`;
+    const at = '2001-02-03T04:05:30.000Z'; // a minute no other test writes to
+    const ev = (to: string, from: string | null, extra: Record<string, unknown> = {}) =>
+      ({
+        kind: 'TRANSITION',
+        transitionId: `t-${Math.random()}`,
+        notificationId: 'n-1',
+        eventId: null,
+        userId,
+        eventType: 'TXNX-003',
+        category: 'TRANSACTION',
+        channel: 'push',
+        priority: 'HIGH',
+        from,
+        to,
+        at,
+        sinceCreatedMs: 1200,
+        correlationId: 'corr-fs',
+        ...extra,
+      }) as never;
+    await fs.record(ev('SENT', 'QUEUED', { costMicros: 500 }));
+    await fs.record(ev('DELIVERED', 'SENT'));
+    await fs.record(ev('CLICKED', 'DELIVERED'));
+    await fs.record(ev('ENRICHED', 'CREATED')); // not counted
+    const rt = await fs.realtime(new Date(at), 1);
+    expect(rt.push).toMatchObject({
+      sent: 1,
+      delivered: 1,
+      clicked: 1,
+      cost_micros: 500,
+      avgDeliveryLatencyMs: 1200,
+    });
+    expect(await fs.engagement(userId)).toEqual({ push: { delivered: 1, engaged: 1 } });
+    await redis.del(`eng:${userId}`, `rt:${Math.floor(Date.parse(at) / 60000)}`);
   });
 });

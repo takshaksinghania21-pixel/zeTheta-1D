@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { Container } from '../../container';
-import { ForbiddenError, NotFoundError } from '../../common/errors';
-import { hasPermission } from '../../modules/auth/permissions';
-import type { Principal } from '../../modules/auth/service';
-import type { NotificationRow } from '../../modules/notifications/types';
-import type { Api } from '../http';
+import { ForbiddenError, NotFoundError } from '../../utils/errors';
+import { hasPermission } from '../middleware/permissions';
+import type { Principal } from '../middleware/auth-service';
+import type { NotificationRow } from '../../database/models/notification';
+import type { Api } from '../middleware/http';
 import { camel, toNotificationDto } from '../mappers';
-import { PRIORITY_NUMBER, pdfChannel } from '../pdf-contract';
+import { PRIORITY_NUMBER, pdfChannel } from '../validators/pdf-contract';
 import {
   NotificationDetailSchema,
   CategoryEnum,
@@ -16,7 +16,7 @@ import {
   PaginationQuery,
   StateEnum,
   UuidParam,
-} from '../schemas';
+} from '../validators/schemas';
 
 const NotificationPageSchema = PageOf(NotificationSchema, 'NotificationPage');
 
@@ -179,7 +179,7 @@ export function registerNotificationRoutes(api: Api, c: Container): void {
             frequency_cap_checked: capChecked,
             frequency_cap_result: capped ? 'CAPPED' : capChecked ? 'WITHIN_LIMITS' : null,
           },
-          cost_paisa: Math.round(n.cost_micros / 10000), // bigint arrives as a string; `/` coerces
+          cost_paisa: Math.round(n.cost_micros / 10000),
           created_at: new Date(n.created_at).toISOString(),
           delivered_at: n.delivered_at ? new Date(n.delivered_at).toISOString() : null,
           latency_ms: n.delivered_at

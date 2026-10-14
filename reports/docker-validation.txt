@@ -1,0 +1,112 @@
+# Docker / Compose validation — 2026-10-12T12:42Z
+# Host: macOS arm64, Docker version 29.8.2, build 7fc2dff, Docker Compose version v5.5.1, engine 29.8.2 (Docker Desktop, 10 CPU, 8319504384 B)
+# Env: .env + .local/compose.env (git-ignored; generated passwords, SEED=true, host ports 15432/16379/19092/35672/3000). No secret values in this file.
+
+## docker compose config --quiet
+main: OK   test (docker-compose.test.yml): OK   main with .env only: refused (POSTGRES/REDIS/RABBITMQ_PASSWORD required)
+
+## Image zetheta-notification-engine:local
+user=node entrypoint=[/sbin/tini --] cmd=[node dist/src/server.js]
+node: v20.19.6  npm/npx/yarn: removed
+unpacked filesystem (du -sxm /, as root): 183 MB; docker save tar: 60.5 MB; Docker Desktop (containerd store) SIZE column: 275MB
+
+## docker compose ps (after full stop/start cycle)
+NAME                                IMAGE                               STATUS
+zetheta-notify-app-1                zetheta-notification-engine:local   Up 4 minutes (healthy)
+zetheta-notify-kafka-1              confluentinc/cp-kafka:7.5.0         Up 4 minutes (healthy)
+zetheta-notify-migrate-1            zetheta-notification-engine:local   Exited (0) 4 minutes ago
+zetheta-notify-postgres-1           postgres:16.15-alpine               Up 4 minutes (healthy)
+zetheta-notify-rabbitmq-1           rabbitmq:4.3.6-management-alpine    Up 4 minutes (healthy)
+zetheta-notify-redis-1              redis:7.4.11-alpine                 Up 4 minutes (healthy)
+zetheta-notify-worker-analytics-1   zetheta-notification-engine:local   Up 4 minutes (healthy)
+zetheta-notify-worker-critical-1    zetheta-notification-engine:local   Up 4 minutes (healthy)
+zetheta-notify-worker-dispatch-1    zetheta-notification-engine:local   Up 4 minutes (healthy)
+zetheta-notify-worker-dispatch-2    zetheta-notification-engine:local   Up 4 minutes (healthy)
+zetheta-notify-worker-events-1      zetheta-notification-engine:local   Up 4 minutes (healthy)
+zetheta-notify-zookeeper-1          confluentinc/cp-zookeeper:7.5.0     Up 4 minutes (healthy)
+
+## Restart counts
+zetheta-notify-app-1 restarts=0 oom=false
+zetheta-notify-kafka-1 restarts=0 oom=false
+zetheta-notify-migrate-1 restarts=0 oom=false
+zetheta-notify-postgres-1 restarts=0 oom=false
+zetheta-notify-rabbitmq-1 restarts=0 oom=false
+zetheta-notify-redis-1 restarts=0 oom=false
+zetheta-notify-worker-analytics-1 restarts=0 oom=false
+zetheta-notify-worker-critical-1 restarts=0 oom=false
+zetheta-notify-worker-dispatch-1 restarts=0 oom=false
+zetheta-notify-worker-dispatch-2 restarts=0 oom=false
+zetheta-notify-worker-events-1 restarts=0 oom=false
+zetheta-notify-zookeeper-1 restarts=0 oom=false
+
+## migrate log (first run / restart run)
+migrations: batch 1, applied 3: 20261011000001_initial_schema, 20261012000001_pdf_alignment, 20261012000002_template_ab_tests
+seed complete: templates created=650, users created=1006, dnd entries=302
+migrations: batch 2, applied 0: none
+seed complete: templates created=0, users created=0, dnd entries=302
+
+## Health
+app /health/ready: {"status":"ready","checks":{"rabbitmq":"up","redis":"up","postgres":"up","kafka":"up"}}
+worker-events-1: {"status":"ready","workers":["outbox-relay","event-consumer","scheduler","dlq-ingest"]}
+worker-critical-1: {"status":"ready","workers":["critical-consumer","outbox-relay"]}
+worker-dispatch-1: {"status":"ready","workers":["dispatcher","outbox-relay"]}
+worker-dispatch-2: {"status":"ready","workers":["dispatcher","outbox-relay"]}
+worker-analytics-1: {"status":"ready","workers":["analytics"]}
+
+## PostgreSQL sessions (pg_stat_ssl)
+zetheta-notification-engine ssl=true TLSv1.3 sessions=6
+hba: local all all trust;hostssl all all all scram-sha-256;hostnossl all all all reject;
+
+## Kafka topics (name partitions)
+zetheta.notification-dlq partitions=1
+zetheta.notification-events partitions=6
+zetheta.notification-lifecycle partitions=6
+zetheta.notification-critical partitions=6
+__consumer_offsets partitions=50
+groups: zetheta.notification-engine.event-consumer zetheta.notification-engine.analytics zetheta.notification-engine.critical-consumer 
+
+## RabbitMQ (vhost zetheta)
+name	consumers	messages
+zetheta.delivery.whatsapp	2	0
+zetheta.delivery.inapp	2	0
+zetheta.delivery.email	2	0
+zetheta.delivery.dlq	1	0
+zetheta.delivery.push	2	0
+zetheta.delivery.sms	2	0
+
+## Redis
+maxmemory-policy=noeviction appendonly=yes COMMAND INFO flushall/flushdb/keys -> [] (empty = disabled)
+unauthenticated: NOAUTH Authentication required.
+
+## PostgreSQL TLS (host psql 16 → Compose PostgreSQL 127.0.0.1:15432)
+1 trusted CA (.local/certs/pg-server.crt), sslmode=verify-full, host=localhost : connected, ssl=true TLSv1.3 TLS_AES_256_GCM_SHA384
+2 plaintext, sslmode=disable                                                  : rejected — pg_hba.conf rejects connection ... no encryption
+3 untrusted CA (throwaway self-signed CA), sslmode=verify-full                 : rejected — SSL error: certificate verify failed
+4 trusted CA but host name 127.0.0.1 (not in SAN), sslmode=verify-full         : rejected — certificate ... does not match host name
+Before the fix, (2) connected without TLS (ssl=off in pg_stat_ssl) and the migrate CLI used plaintext.
+App containers: all sessions ssl=true TLSv1.3 (rejectUnauthorized, CA = /run/secrets/pg_server_crt).
+
+## Smoke test (npm run smoke, BASE_URL=http://localhost:3000, mock providers)
+Run 1 (fresh stack): 15/15 passed. Run 2 (after full stop/start): 15/15 passed. Report: reports/smoke-test-docker.json
+
+## Additional functional checks (reports/docker-functional.json): 7/7
+Redis ZSET retry (member in zetheta.retry:schedule, epoch-ms score; path ...QUEUED>RETRYING>SENT>DELIVERED)
+Quiet hours defer push+SMS (Australia/Sydney 23:00) · CRITICAL RISK-001 bypass recorded (QUIET_HOURS_BYPASS) and sent
+DND FULLY_BLOCKED blocks promotional SMS (SIPX-004 → sms:DND) · mandatory RISK-001 still sent by SMS (DND_NOT_APPLICABLE)
+Frequency cap: 4th MARKET alert in the hour CAPPED (FREQUENCY_CAP_CATEGORY) · analytics realtime + delivery-rates
+Critical consumer group committed 4 offsets (4 RISK-001 events); lag 0; notification_dnd_violations 0
+
+## Graceful shutdown (docker stop → SIGTERM via tini)
+worker-dispatch: 0 s, exit 0 · worker-events: 5 s, exit 0 · app: 2 s, exit 0 — logs "graceful shutdown started" → "shutdown complete"
+docker compose stop (whole stack): 8 s; app containers exit 0, Kafka/ZooKeeper exit 143 (JVM SIGTERM); restart → all healthy, data kept
+
+## docker compose down → up (named volumes kept)
+Before fix: kafka restart loop — kafka.common.InconsistentClusterIdException (ZooKeeper data/log were anonymous
+volumes, so the recreated ZooKeeper had a new cluster id). Fix: named volumes zkdata/zklog. Existing state recovered
+by copying the old ZooKeeper anonymous volumes into them (cp -a, uid 1000 kept); no data deleted.
+After fix: down → up healthy, 0 cluster-id errors, Kafka consumer offsets kept (critical-consumer 4), PostgreSQL kept
+(users=1016). Smoke 15/15 and functional 7/7 re-run on this configuration.
+
+## Node 20 (container node:20.19.6-alpine, clean npm ci, no .env) against docker-compose.test.yml
+typecheck ok · lint ok · prettier ok · build ok · jest 23/23 suites, 379/379 tests;
+statements 93.23 %, branches 80.67 %, functions 92.51 %, lines 95.81 % (reports/test-suites-node20.txt)

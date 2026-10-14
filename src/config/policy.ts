@@ -9,7 +9,7 @@ import {
   LOCALES,
   PRIORITIES,
   REGULATORY_CLASSES,
-} from '../domain/types';
+} from '../utils/types';
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be HH:MM (24h)');
 const window = z.object({ limit: z.number().int().min(1), windowSeconds: z.number().int().min(1) });
@@ -77,8 +77,23 @@ const policySchema = z.object({
   costs: z.object({
     perMessageMicros: z.record(z.enum(CHANNELS), z.number().int().min(0)),
     dailyBudgetMicros: z.partialRecord(z.enum(CHANNELS), z.number().int().min(0)),
+    /** Per-user spend limits (PDF §A3.2 priority 4); omitted = unlimited. */
+    userDailyBudgetMicros: z.number().int().min(0).optional(),
+    userMonthlyBudgetMicros: z.number().int().min(0).optional(),
     budgetExemptPriorities: z.array(z.enum(PRIORITIES)),
   }),
+  /** Share of each provider's quota held back for CRITICAL traffic (no priority inversion). */
+  delivery: z
+    .object({ criticalReservePercent: z.number().int().min(0).max(90) })
+    .default({ criticalReservePercent: 20 }),
+  /** Delivery optimisation from per-user engagement history (PDF §A3.2 priority 3). */
+  routing: z
+    .object({
+      engagementMinSamples: z.number().int().min(1),
+      ignoreBelowRate: z.number().min(0).max(1),
+      preferAboveRate: z.number().min(0).max(1),
+    })
+    .default({ engagementMinSamples: 20, ignoreBelowRate: 0.05, preferAboveRate: 0.2 }),
   templates: z.object({
     supportedLocales: z.array(z.enum(LOCALES)),
     fallbackLocale: z.enum(LOCALES),

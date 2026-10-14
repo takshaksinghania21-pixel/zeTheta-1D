@@ -1,24 +1,24 @@
-import { ManualClock } from '../../src/common/clock';
+import { ManualClock } from '../../src/utils/clock';
 import { loadPolicy, type NotificationPolicy } from '../../src/config/policy';
-import type { ConsentState } from '../../src/modules/compliance/consent';
+import type { ConsentState } from '../../src/compliance/consent';
 import {
   DndService,
   InMemoryDndCache,
   type DndRegistryEntry,
   type DndRegistrySource,
-} from '../../src/modules/compliance/dnd';
-import { InMemoryFrequencyCapper } from '../../src/modules/frequency/frequency-capper';
-import { resolvePreferences } from '../../src/modules/preferences/resolver';
-import type { UserPreferences } from '../../src/modules/preferences/types';
-import { InMemoryBudgetTracker } from '../../src/modules/routing/budget';
+} from '../../src/compliance/dnd/dnd';
+import { InMemoryFrequencyCapper } from '../../src/compliance/frequency-cap/frequency-capper';
+import { resolvePreferences } from '../../src/preferences/resolver';
+import type { UserPreferences } from '../../src/preferences/types';
+import { InMemoryBudgetTracker } from '../../src/notifications/routing/budget';
 import {
   RoutingEngine,
   type ContactSummary,
   type RoutingInput,
-} from '../../src/modules/routing/routing-engine';
-import { EventTaxonomy } from '../../src/modules/taxonomy/taxonomy';
-import { SAMPLE_PAYLOADS } from '../../src/modules/taxonomy/fixtures';
-import type { Channel } from '../../src/domain/types';
+} from '../../src/notifications/routing/routing-engine';
+import { EventTaxonomy } from '../../src/events/models/taxonomy';
+import { SAMPLE_PAYLOADS } from '../../src/events/models/fixtures';
+import type { Channel } from '../../src/utils/types';
 
 export class FakeDndSource implements DndRegistrySource {
   entries = new Map<string, DndRegistryEntry>();

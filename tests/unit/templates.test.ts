@@ -1,12 +1,12 @@
-import { TemplateEngine, TemplateRenderError } from '../../src/modules/templates/engine';
+import { TemplateEngine, TemplateRenderError } from '../../src/templates/engine/engine';
 import {
   FileTemplateStore,
   loadTemplateSources,
   DIGEST_EVENT_TYPE,
-} from '../../src/modules/templates/source';
-import { EventTaxonomy } from '../../src/modules/taxonomy/taxonomy';
-import { SAMPLE_DIGEST, SAMPLE_PAYLOADS } from '../../src/modules/taxonomy/fixtures';
-import { CHANNELS, LOCALES, type Channel, type Locale } from '../../src/domain/types';
+} from '../../src/templates/definitions/source';
+import { EventTaxonomy } from '../../src/events/models/taxonomy';
+import { SAMPLE_DIGEST, SAMPLE_PAYLOADS } from '../../src/events/models/fixtures';
+import { CHANNELS, LOCALES, type Channel, type Locale } from '../../src/utils/types';
 
 const taxonomy = EventTaxonomy.load();
 const store = new FileTemplateStore();

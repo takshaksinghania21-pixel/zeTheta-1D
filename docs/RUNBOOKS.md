@@ -21,13 +21,24 @@ curl -s localhost:3000/api/v1/ops/providers -H "authorization: Bearer $OPS"
 `ops/queues` returns RabbitMQ depth/consumers per queue, Kafka consumer lag,
 outbox backlog, open DLQ entries and pending scheduled jobs.
 
+```bash
+curl -s "localhost:3000/api/v1/analytics/realtime?minutes=5" -H "authorization: Bearer $OPS"
+```
+
+Per-channel sent/delivered/failed/capped/DND counts and average delivery latency
+for the last minutes, from Redis (no database load).
+
 ## RB-1 Events accepted but not processed (`status: RECEIVED`)
 
 1. `outboxBacklog` growing → outbox relay not running or Kafka unavailable.
    Check `outbox.last_error`: `SELECT id, attempts, last_error FROM outbox WHERE published_at IS NULL ORDER BY id LIMIT 20;`
-2. Backlog 0 but Kafka lag growing → event-consumer down or failing; look for
-   `retryable event failure` in logs (offsets are not committed until the DB
-   transaction succeeds, so the consumer retries automatically).
+2. Backlog 0 but Kafka lag growing (`kafka_consumer_lag`, alert
+   `KafkaConsumerLag`) → event-consumer (`notification-events`) or
+   critical-consumer (`notification-critical`, CRITICAL events only) down or
+   failing; look for `retryable event failure` in logs (offsets are committed
+   manually, only after the DB transaction succeeds, so the consumer retries
+   automatically). Margin calls stuck while bulk traffic flows → check the
+   `worker-critical` process first.
 3. Event `FAILED` → see `status_reason` and the DLQ (`source=EVENT`); fix the
    cause (e.g. schema change) and `POST /api/v1/dlq/{id}/retry`.
 
@@ -36,13 +47,22 @@ outbox backlog, open DLQ entries and pending scheduled jobs.
 1. `rabbitmq.<prefix>delivery.<channel>.consumers == 0` → start a dispatcher.
 2. Messages present but not consumed → check dispatcher logs for lock
    contention (`requeue`) or DB errors.
-3. Lost messages (e.g. queue deleted): the scheduler sweeper re-enqueues
-   notifications stale for `RETRY_SWEEP_STALE_SECONDS` (default 300 s).
-   Duplicates are ignored by the dispatcher.
+3. `RETRYING` rows wait in the Redis ZSET `<RABBITMQ_PREFIX>retry:schedule`
+   (score = due time; `notification_retry_queue_depth`); the scheduler moves due
+   members to the delivery queues. Inspect without changing anything:
+   `redis-cli -n <db> ZRANGE zetheta.retry:schedule 0 9 WITHSCORES`.
+4. Lost messages (queue deleted, Redis lost): the scheduler sweep re-enqueues
+   notifications stale for `RETRY_SWEEP_STALE_SECONDS` (default 300 s) using
+   `notifications.next_attempt_at`. Duplicates are ignored by the dispatcher.
+5. Under overload, notifications skipped only because of our own per-provider
+   quota (`LOCAL_RATE_LIMIT`) are rescheduled without spending their retry
+   budget; 20 % of each provider's quota is reserved for CRITICAL traffic
+   (`delivery.criticalReservePercent`).
 
 ## RB-3 Provider outage / circuit open
 
-1. `GET /ops/providers` → `circuit.status: OPEN`.
+1. `GET /api/v1/ops/providers` → `circuit.status: OPEN` (alert `ProviderCircuitOpen`,
+   `delivery_provider_circuit_state == 2`).
 2. Traffic fails over to the next provider of the channel automatically; if
    all are down, notifications go `RETRYING` (delay ≥ circuit cool-down) and
    eventually `DLQ` + fallback channel.
@@ -65,6 +85,11 @@ curl -s localhost:3000/api/v1/dlq/{id} -H "authorization: Bearer $OPS"
 - Discard (ADMIN only): `{"resolution":"DISCARDED"}` → notification `FAILED`.
 - `POISON` entries (unparseable messages) cannot be retried; inspect `payload`.
   All actions are written to `audit_logs`.
+- Entries are classified automatically (`?classification=`):
+  `TRANSIENT` (retries exhausted on temporary errors → retry once the provider
+  recovers), `PERMANENT` (bad recipient/data → fix the data or discard),
+  `CONFIGURATION` (auth/credential or template errors → fix setup, then retry).
+- Alert `HighDLQDepth` fires when `notification_dlq_depth > 100`.
 
 ## RB-5 Webhook signature failures
 
@@ -80,7 +105,10 @@ be disabled: the config forces it).
 1. `GET /api/v1/events/{eventId}` → notifications and decisions.
 2. Typical decisions: `PREFERENCE_CHANNEL_DISABLED`, `CONSENT_REVOKED`,
    `WHATSAPP_OPT_IN_REQUIRED`, `DND_*`, `QUIET_HOURS_DEFER`,
-   `FREQUENCY_CAP_*`, `NO_CONTACT`, `CONTACT_INVALID`.
+   `FREQUENCY_CAP_*`, `NO_CONTACT`, `CONTACT_INVALID`, `USER_BUDGET_EXHAUSTED`,
+   `ENGAGEMENT_DEPRIORITISED` (channel dropped for low engagement),
+   `COST_OPTIMISED`. Capped notifications (`CAPPED`) are not lost: they are
+   released in the next cap window, or folded into a digest when 3+ are waiting.
 3. Dry run without side effects: `POST /api/v1/compliance/evaluate {"userId": "...", "eventType": "..."}`.
 4. `MANDATORY_UNDELIVERABLE` → a mandatory event reached no mandatory channel;
    contact the customer through another route.
@@ -88,7 +116,8 @@ be disabled: the config forces it).
 ## RB-7 Quiet-hours releases / digests not sent
 
 `SELECT kind, status, count(*) FROM scheduled_notifications GROUP BY 1,2;`
-`PENDING` with past `due_at` → scheduler not running. `FAILED` → see
+`PENDING` with past `due_at` → scheduler not running. `DIGEST` jobs also
+carry capped notifications (state `CAPPED` with `next_attempt_at`). `FAILED` → see
 `last_error` (job retried up to 5 times). Stuck `PROCESSING` rows are reclaimed
 by the sweeper after `RETRY_SWEEP_STALE_SECONDS`.
 
@@ -97,11 +126,14 @@ by the sweeper after `RETRY_SWEEP_STALE_SECONDS`.
 Processing is idempotent, so replaying is safe:
 
 ```bash
-kafka-consumer-groups --bootstrap-server localhost:9092 --group zetheta.notification-engine.event-consumer --topic zetheta.financial-events.v1 --reset-offsets --to-datetime 2026-01-15T00:00:00.000 --execute
+kafka-consumer-groups --bootstrap-server localhost:9092 --group zetheta.notification-engine.event-consumer --topic zetheta.notification-events --reset-offsets --to-datetime 2026-01-15T00:00:00.000 --execute
 ```
 
-(Stop event consumers first.) Already-`PROCESSED` events are skipped; the
-analytics consumer de-duplicates by transition id.
+(Stop event consumers first. For CRITICAL events use group
+`zetheta.notification-engine.critical-consumer` and topic
+`zetheta.notification-critical`.) Already-`PROCESSED` events are skipped; the
+analytics consumer de-duplicates by transition id before updating the hourly
+aggregate and the Redis counters.
 
 ## RB-9 Partition maintenance
 

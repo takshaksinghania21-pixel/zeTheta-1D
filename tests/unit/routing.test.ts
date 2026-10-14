@@ -78,7 +78,8 @@ describe('routing engine', () => {
     }));
     const plan = await h.engine.route(
       h.input('SIPX-004', {
-        prefs: { categories: { SIP: { channels: ['sms', 'push'] } } },
+        // SMS + in-app only: with a cheaper intrusive channel, cost optimisation drops SMS first.
+        prefs: { categories: { SIP: { channels: ['sms', 'inapp'] } } },
         consents,
       }),
     );
@@ -86,7 +87,7 @@ describe('routing engine', () => {
       action: 'DND',
       reason: 'DND_FULLY_BLOCKED',
     });
-    expect(plan.plans.find((p) => p.channel === 'push')?.action).toBe('QUEUE');
+    expect(plan.plans.find((p) => p.channel === 'inapp')?.action).toBe('QUEUE');
   });
 
   it('does not apply DND to transactional SMS', async () => {
@@ -299,5 +300,69 @@ describe('routing engine', () => {
       b.input('RISK-001', { eventId: 'same', prefs: { channels: { sms: false } } }),
     );
     expect(pa).toEqual(pb);
+  });
+
+  describe('§A3.2 priorities 3–4: engagement and cost', () => {
+    const whatsappOptIn = [
+      {
+        channel: 'whatsapp' as const,
+        purpose: 'TRANSACTIONAL' as const,
+        status: 'GRANTED' as const,
+        recordedAt: new Date(DAY),
+        source: 'test',
+      },
+    ];
+    const ignoresPush = {
+      push: { delivered: 30, engaged: 0 },
+      whatsapp: { delivered: 25, engaged: 15 },
+    };
+
+    it('routes a non-regulatory event away from a channel the user ignores to one they engage with', async () => {
+      const h = createHarness(DAY);
+      const input = h.input('TXNX-004', {
+        prefs: { channels: { whatsapp: true } },
+        consents: whatsappOptIn,
+      });
+      const plan = await h.engine.route({ ...input, engagement: ignoresPush });
+      expect(plan.plans.find((p) => p.channel === 'push')).toBeUndefined();
+      expect(plan.plans.find((p) => p.channel === 'whatsapp')?.action).toBe('QUEUE');
+      expect(plan.decisions.map((d) => d.rule)).toEqual(
+        expect.arrayContaining(['ENGAGEMENT_DEPRIORITISED', 'ENGAGEMENT_PREFERRED_CHANNEL']),
+      );
+    });
+
+    it('never optimises away a regulatory channel, and ignores thin data', async () => {
+      const h = createHarness(DAY);
+      const mandatory = await h.engine.route({ ...h.input('TXNX-001'), engagement: ignoresPush });
+      expect(mandatory.plans.find((p) => p.channel === 'push')?.action).toBe('QUEUE');
+      const thin = await h.engine.route({
+        ...h.input('TXNX-004'),
+        engagement: { push: { delivered: 3, engaged: 0 } },
+      });
+      expect(thin.plans.find((p) => p.channel === 'push')?.action).toBe('QUEUE');
+    });
+
+    it('keeps non-urgent events off SMS when a cheaper channel is selected', async () => {
+      const h = createHarness(DAY);
+      const plan = await h.engine.route(
+        h.input('SIPX-001', {
+          prefs: { categories: { SIP: { channels: ['sms', 'push', 'inapp'] } } },
+        }),
+      );
+      expect(plan.plans.find((p) => p.channel === 'sms')).toBeUndefined();
+      expect(plan.decisions.some((d) => d.rule === 'COST_OPTIMISED')).toBe(true);
+    });
+
+    it('enforces per-user daily budgets, except for exempt priorities', async () => {
+      const h = createHarness(DAY);
+      await h.budget.add('sms', h.policy.costs.userDailyBudgetMicros!, h.clock.now(), 'user-1');
+      const low = await h.engine.route(
+        h.input('SIPX-001', { prefs: { categories: { SIP: { channels: ['sms', 'inapp'] } } } }),
+      );
+      expect(low.decisions.some((d) => d.rule === 'USER_BUDGET_EXHAUSTED')).toBe(true);
+      expect(low.plans.find((p) => p.channel === 'sms')).toBeUndefined();
+      const high = await h.engine.route(h.input('TXNX-003'));
+      expect(high.plans.find((p) => p.channel === 'sms')?.action).toBe('QUEUE');
+    });
   });
 });

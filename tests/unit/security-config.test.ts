@@ -7,13 +7,13 @@ import {
   safeEqual,
   stableStringify,
   verifySecret,
-} from '../../src/common/crypto';
-import { runWithContext, normaliseCorrelationId } from '../../src/common/context';
-import { createLogger } from '../../src/common/logger';
-import { maskEmail, maskPhone, maskToken, sanitizeForLog, scrubString } from '../../src/common/pii';
-import { InMemoryRateLimiter } from '../../src/common/rate-limiter';
-import { hasPermission, PERMISSIONS } from '../../src/modules/auth/permissions';
-import { ROLES } from '../../src/domain/types';
+} from '../../src/utils/crypto';
+import { runWithContext, normaliseCorrelationId } from '../../src/utils/context';
+import { createLogger } from '../../src/utils/logger';
+import { maskEmail, maskPhone, maskToken, sanitizeForLog, scrubString } from '../../src/utils/pii';
+import { InMemoryRateLimiter } from '../../src/utils/rate-limiter';
+import { hasPermission, PERMISSIONS } from '../../src/api/middleware/permissions';
+import { ROLES } from '../../src/utils/types';
 import {
   signGeneric,
   verifyGeneric,
@@ -21,7 +21,7 @@ import {
   verifySharedSecret,
   verifyTwilio,
   twilioSignature,
-} from '../../src/modules/webhooks/signatures';
+} from '../../src/delivery/webhooks/signatures';
 
 const key = Buffer.alloc(32, 7).toString('base64');
 const base = {

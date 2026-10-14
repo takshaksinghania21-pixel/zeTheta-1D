@@ -1,4 +1,4 @@
-import type { NotificationRow } from '../modules/notifications/types';
+import type { NotificationRow } from '../database/models/notification';
 
 const iso = (d: Date | string | null | undefined): string | null =>
   d ? new Date(d).toISOString() : null;

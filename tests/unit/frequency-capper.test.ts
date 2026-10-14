@@ -2,7 +2,7 @@ import { loadPolicy } from '../../src/config/policy';
 import {
   InMemoryFrequencyCapper,
   type CapRequest,
-} from '../../src/modules/frequency/frequency-capper';
+} from '../../src/compliance/frequency-cap/frequency-capper';
 import { capperContract } from '../helpers/capper-contract';
 
 const policy = loadPolicy();

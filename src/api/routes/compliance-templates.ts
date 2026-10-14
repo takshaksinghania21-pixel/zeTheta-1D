@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { Container } from '../../container';
-import { AppError, ValidationError } from '../../common/errors';
-import { CHANNELS, LOCALES } from '../../domain/types';
-import { evaluateDnd } from '../../modules/compliance/dnd';
-import { normaliseContact } from '../../modules/users/contacts';
-import { DIGEST_EVENT_TYPE } from '../../modules/templates/source';
-import { SAMPLE_DIGEST, SAMPLE_PAYLOADS } from '../../modules/taxonomy/fixtures';
-import type { Api } from '../http';
+import { AppError, ValidationError } from '../../utils/errors';
+import { CHANNELS, LOCALES } from '../../utils/types';
+import { evaluateDnd } from '../../compliance/dnd/dnd';
+import { normaliseContact } from '../../database/models/contacts';
+import { DIGEST_EVENT_TYPE } from '../../templates/definitions/source';
+import { SAMPLE_DIGEST, SAMPLE_PAYLOADS } from '../../events/models/fixtures';
+import type { Api } from '../middleware/http';
 import { camel } from '../mappers';
 import {
   ChannelEnum,
@@ -14,7 +14,7 @@ import {
   PolicyDecisionSchema,
   RenderedContentSchema,
   UuidParam,
-} from '../schemas';
+} from '../validators/schemas';
 
 const TemplateSchema = z
   .object({

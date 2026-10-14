@@ -10,7 +10,7 @@ export default tseslint.config(
       'node_modules/**',
       '.local/**',
       'tests/load/**',
-      'jest.config.js',
+      'jest.config.ts',
     ],
   },
   js.configs.recommended,

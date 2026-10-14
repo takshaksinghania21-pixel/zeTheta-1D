@@ -8,7 +8,7 @@ import {
   type SASLOptions,
 } from 'kafkajs';
 import type { AppConfig } from '../../config/env';
-import type { Logger } from '../../common/logger';
+import type { Logger } from '../../utils/logger';
 
 export interface TopicNames {
   /** Non-critical financial events, keyed (partitioned) by user id. */
@@ -134,7 +134,11 @@ export async function runConsumer(
   await consumer.connect();
   await consumer.subscribe({ topic: opts.topic, fromBeginning: opts.fromBeginning ?? true });
   consumer.on(consumer.events.CRASH, (e) => {
-    logger.error({ error: e.payload.error, groupId: opts.groupId }, 'kafka consumer crashed');
+    // restart=false means kafkajs gave up: the worker needs restarting by its supervisor.
+    logger.error(
+      { error: e.payload.error, groupId: opts.groupId, restart: e.payload.restart },
+      e.payload.restart ? 'kafka consumer crashed; restarting' : 'kafka consumer stopped',
+    );
   });
   await consumer.run({
     autoCommit: false,

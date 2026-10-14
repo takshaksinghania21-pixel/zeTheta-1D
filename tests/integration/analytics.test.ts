@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { io as ioClient } from 'socket.io-client';
-import type { LifecycleEvent } from '../../src/modules/notifications/types';
+import type { LifecycleEvent } from '../../src/database/models/notification';
 import { startStack, createUser, type Stack } from '../helpers/stack';
 
 let s: Stack;

@@ -2,13 +2,13 @@ import { Emitter } from '@socket.io/redis-emitter';
 import type { Redis } from 'ioredis';
 import type { Kafka, Producer } from 'kafkajs';
 import type { Knex } from 'knex';
-import { mathRandom, systemClock, type Clock, type RandomSource } from './common/clock';
-import { FieldEncryptor } from './common/crypto';
-import { createLogger, type Logger } from './common/logger';
-import { RedisRateLimiter, type RateLimiter } from './common/rate-limiter';
+import { mathRandom, systemClock, type Clock, type RandomSource } from './utils/clock';
+import { FieldEncryptor } from './utils/crypto';
+import { createLogger, type Logger } from './utils/logger';
+import { RedisRateLimiter, type RateLimiter } from './utils/rate-limiter';
 import type { AppConfig } from './config/env';
 import { loadPolicy, type NotificationPolicy } from './config/policy';
-import { createDb } from './infrastructure/database/knex';
+import { createDb } from './database/knex';
 import {
   createKafka,
   createProducer,
@@ -16,44 +16,48 @@ import {
   type TopicNames,
 } from './infrastructure/kafka/kafka';
 import { OutboxRelay } from './infrastructure/outbox/outbox';
-import { RedisMockBehaviorStore, type MockBehaviorStore } from './infrastructure/providers/mock';
+import { RedisMockBehaviorStore, type MockBehaviorStore } from './delivery/providers/mock';
 import {
   RabbitConnection,
   rabbitTopology,
   type RabbitTopology,
 } from './infrastructure/rabbitmq/rabbitmq';
 import { createRedis } from './infrastructure/redis/redis';
-import { AnalyticsService } from './modules/analytics/service';
-import { AuditLog } from './modules/audit/audit';
-import { AuthService } from './modules/auth/service';
-import { DndService, type DndCache } from './modules/compliance/dnd';
-import { RedisDndCache } from './modules/compliance/redis-dnd-cache';
-import { PolicyDecisionRepository, PostgresDndSource } from './modules/compliance/repository';
-import { ConsentRepository } from './modules/consent/repository';
-import { CircuitBreaker, type CircuitStore } from './modules/delivery/circuit-breaker';
-import { DeliveryDispatcher } from './modules/delivery/dispatcher';
-import type { DeliveryProvider } from './modules/delivery/provider';
-import { RedisCircuitStore } from './modules/delivery/redis-circuit-store';
-import { buildProviders, ProviderRegistry } from './modules/delivery/registry';
-import { DeadLetterRepository } from './modules/dlq/repository';
-import { DeadLetterService } from './modules/dlq/service';
-import { EventIngestionService } from './modules/events/ingestion';
-import { EventProcessor } from './modules/events/processor';
-import { RedisFrequencyCapper, type FrequencyCapper } from './modules/frequency/frequency-capper';
-import { NotificationFactory } from './modules/notifications/factory';
-import { NotificationLifecycle } from './modules/notifications/lifecycle';
-import { NotificationRepository } from './modules/notifications/repository';
-import { NotificationService } from './modules/notifications/service';
-import { RedisRetryScheduler } from './modules/retries/retry-scheduler';
-import { RedisBudgetTracker, type BudgetTracker } from './modules/routing/budget';
-import { RoutingEngine } from './modules/routing/routing-engine';
-import { Scheduler } from './modules/scheduling/scheduler';
-import { EventTaxonomy } from './modules/taxonomy/taxonomy';
-import { TemplateEngine } from './modules/templates/engine';
-import { TemplateRepository } from './modules/templates/repository';
-import { UserContextService } from './modules/users/context';
-import { UserRepository } from './modules/users/repository';
-import { WebhookService } from './modules/webhooks/service';
+import { AnalyticsService } from './analytics/service';
+import { AuditLog } from './database/models/audit';
+import { AuthService } from './api/middleware/auth-service';
+import { DndService, type DndCache } from './compliance/dnd/dnd';
+import { RedisDndCache } from './compliance/dnd/redis-dnd-cache';
+import { PolicyDecisionRepository, PostgresDndSource } from './compliance/decision-repository';
+import { ConsentRepository } from './compliance/consent-repository';
+import { CircuitBreaker, type CircuitStore } from './delivery/circuit-breaker/circuit-breaker';
+import { DeliveryDispatcher } from './delivery/dispatcher';
+import type { DeliveryProvider } from './delivery/providers/provider';
+import { RedisCircuitStore } from './delivery/circuit-breaker/redis-circuit-store';
+import { buildProviders, ProviderRegistry } from './delivery/providers/registry';
+import { DeadLetterRepository } from './delivery/dlq/repository';
+import { DeadLetterService } from './delivery/dlq/service';
+import { EventIngestionService } from './events/ingestion';
+import { EventProcessor } from './events/processor';
+import {
+  RedisFrequencyCapper,
+  type FrequencyCapper,
+} from './compliance/frequency-cap/frequency-capper';
+import { NotificationFactory } from './notifications/engine/factory';
+import { NotificationLifecycle } from './notifications/state-machine/lifecycle';
+import { NotificationRepository } from './database/models/notification-repository';
+import { NotificationService } from './notifications/engine/service';
+import { RedisRetryScheduler } from './delivery/retry/retry-scheduler';
+import { RedisBudgetTracker, type BudgetTracker } from './notifications/routing/budget';
+import { RoutingEngine } from './notifications/routing/routing-engine';
+import { Scheduler } from './notifications/engine/scheduler';
+import { EventTaxonomy } from './events/models/taxonomy';
+import { TemplateEngine } from './templates/engine/engine';
+import { TemplateRepository } from './templates/engine/repository';
+import { UserContextService } from './notifications/engine/user-context';
+import { UserRepository } from './database/models/user-repository';
+import { FeatureStore } from './analytics/feature-store';
+import { WebhookService } from './delivery/webhooks/service';
 
 export interface ContainerOverrides {
   clock?: Clock;
@@ -110,6 +114,7 @@ export class Container {
       url: this.config.DATABASE_URL,
       poolMax: this.config.DATABASE_POOL_MAX,
       ssl: this.config.DATABASE_SSL,
+      ...(this.config.DATABASE_SSL_CA_FILE ? { sslCaFile: this.config.DATABASE_SSL_CA_FILE } : {}),
       applicationName: this.config.SERVICE_NAME,
     });
     this.closers.push(() => db.destroy());
@@ -254,6 +259,7 @@ export class Container {
         decisions: this.decisions(),
         dlq: this.dlqRepo(),
         capper: this.capper(),
+        features: this.features(),
         clock: this.clock,
         logger: this.logger.child({ component: 'event-consumer' }),
       }),
@@ -323,6 +329,7 @@ export class Container {
       ),
   );
   readonly analytics = lazy(() => new AnalyticsService(this.db()));
+  readonly features = lazy(() => new FeatureStore(this.redis()));
   readonly retryScheduler = lazy(
     () =>
       new RedisRetryScheduler(

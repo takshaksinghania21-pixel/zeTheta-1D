@@ -2,9 +2,9 @@ import type http from 'node:http';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Server } from 'socket.io';
 import { z } from 'zod';
-import { runWithContext } from './common/context';
+import { runWithContext } from './utils/context';
 import type { Container } from './container';
-import { userRoom } from './infrastructure/providers/socketio';
+import { userRoom } from './delivery/providers/socketio';
 
 const ackSchema = z.object({ id: z.uuid() });
 

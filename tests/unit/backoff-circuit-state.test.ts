@@ -1,4 +1,4 @@
-import { fixedRandom } from '../../src/common/clock';
+import { fixedRandom } from '../../src/utils/clock';
 import { loadPolicy } from '../../src/config/policy';
 import {
   allowedTransitions,
@@ -6,14 +6,14 @@ import {
   canTransition,
   isForwardProgress,
   TERMINAL_STATES,
-} from '../../src/domain/state-machine';
+} from '../../src/notifications/state-machine/state-machine';
 import {
   CircuitBreaker,
   InMemoryCircuitStore,
   circuitAcquire,
   INITIAL_CIRCUIT,
-} from '../../src/modules/delivery/circuit-breaker';
-import { canRetry, computeRetryDelay } from '../../src/modules/retries/backoff';
+} from '../../src/delivery/circuit-breaker/circuit-breaker';
+import { canRetry, computeRetryDelay } from '../../src/delivery/retry/backoff';
 
 const policy = loadPolicy();
 
@@ -179,19 +179,14 @@ describe('notification state machine', () => {
     expect(canTransition('CREATED', 'SENT')).toBe(false);
     expect(canTransition('DELIVERED', 'QUEUED')).toBe(false);
     expect(canTransition('READ', 'DELIVERED')).toBe(false);
-    expect(() => assertTransition('CAPPED', 'QUEUED')).toThrow(/not allowed/);
+    expect(() => assertTransition('DND', 'QUEUED')).toThrow(/not allowed/);
+    // Appendix B: capped notifications are digested or released in the next window.
+    expect(canTransition('CAPPED', 'DIGESTED')).toBe(true);
+    expect(canTransition('CAPPED', 'QUEUED')).toBe(true);
   });
   it('has terminal states with no exits', () => {
     expect(TERMINAL_STATES).toEqual(
-      expect.arrayContaining([
-        'READ',
-        'CAPPED',
-        'DND',
-        'FAILED',
-        'BOUNCED',
-        'SUPPRESSED',
-        'DIGESTED',
-      ]),
+      expect.arrayContaining(['READ', 'DND', 'FAILED', 'BOUNCED', 'SUPPRESSED', 'DIGESTED']),
     );
     for (const s of TERMINAL_STATES) expect(allowedTransitions(s)).toHaveLength(0);
   });

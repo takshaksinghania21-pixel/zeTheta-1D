@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
-import { EventTaxonomy } from '../../src/modules/taxonomy/taxonomy';
-import { SAMPLE_PAYLOADS } from '../../src/modules/taxonomy/fixtures';
-import { CATEGORIES } from '../../src/domain/types';
+import { EventTaxonomy } from '../../src/events/models/taxonomy';
+import { SAMPLE_PAYLOADS } from '../../src/events/models/fixtures';
+import { CATEGORIES } from '../../src/utils/types';
 
 const taxonomy = EventTaxonomy.load();
 const yamlPath = path.resolve(__dirname, '../../config/event-taxonomy.yaml');

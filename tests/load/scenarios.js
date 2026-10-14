@@ -7,6 +7,7 @@
 //   normal        2 M/day   ≈  23/s   (PDF "normal load (2M messages/day)")
 //   peak          10×       ≈ 231/s
 //   crash         20×       ≈ 463/s
+//   critical_isolation  10x transactions + margin calls (CRITICAL topic) — priority inversion check
 //   market_crash  §B2.1 mix over 30 min: 450 000 price alerts (MKTX-001), 28 000 margin
 //                 calls (RISK-001, CRITICAL topic), 3 200 squared-off (RISK-003) ≈ 267/s
 // SCALE multiplies every rate (e.g. SCALE=0.1 for a laptop smoke run). The full
@@ -40,6 +41,12 @@ const SCENARIOS = {
   normal: { transactions: arrival('transactions', 2000000 / 86400) },
   peak: { transactions: arrival('transactions', (10 * 2000000) / 86400) },
   crash: { transactions: arrival('transactions', (20 * 2000000) / 86400) },
+  // Priority inversion check (§C4.3): margin calls on the critical topic while the
+  // normal topic carries a 10x peak of transaction events.
+  critical_isolation: {
+    transactions: arrival('transactions', (10 * 2000000) / 86400),
+    margin_calls: arrival('marginCall', 28000 / 1800),
+  },
   market_crash: {
     price_alerts: arrival('priceAlert', 450000 / 1800),
     margin_calls: arrival('marginCall', 28000 / 1800),
@@ -84,6 +91,8 @@ function post(data, eventType, payload, i) {
 }
 
 const id = () => `${RUN}-${__VU}-${__ITER}`;
+// Spread iterations over every user (and symbol) instead of only the first few.
+const userIndex = () => __VU * 7919 + __ITER * 104729;
 const SYMBOLS = ['SBIN', 'INFY', 'TCS', 'RELIANCE', 'HDFCBANK', 'ITC', 'LT', 'AXISBANK'];
 
 export function transactions(data) {
@@ -99,13 +108,13 @@ export function transactions(data) {
       price: '1520.50',
       executedAt: now,
     },
-    __VU * 100000 + __ITER,
+    userIndex(),
   );
 }
 
 export function priceAlert(data) {
   const now = new Date().toISOString();
-  const symbol = SYMBOLS[__ITER % SYMBOLS.length];
+  const symbol = SYMBOLS[(__VU + __ITER) % SYMBOLS.length];
   post(
     data,
     'MKTX-001',
@@ -118,7 +127,7 @@ export function priceAlert(data) {
       currentPrice: '736.00',
       triggeredAt: now,
     },
-    __VU * 100000 + __ITER,
+    userIndex(),
   );
 }
 
@@ -134,7 +143,7 @@ export function marginCall(data) {
       deadline,
       autoSquareOffTime: deadline,
     },
-    __VU * 100000 + __ITER,
+    userIndex(),
   );
 }
 
@@ -152,6 +161,6 @@ export function squaredOff(data) {
       reason: 'Margin shortfall not cleared',
       squaredOffAt: now,
     },
-    __VU * 100000 + __ITER,
+    userIndex(),
   );
 }

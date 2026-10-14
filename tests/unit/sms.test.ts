@@ -1,4 +1,4 @@
-import { isGsm7, smsInfo, truncateSms } from '../../src/modules/templates/sms';
+import { isGsm7, smsInfo, truncateSms } from '../../src/templates/engine/sms';
 
 describe('SMS length rules', () => {
   it('detects GSM-7 vs UCS-2', () => {

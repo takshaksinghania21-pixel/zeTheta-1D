@@ -1,0 +1,140 @@
+# Node 20 run — 2026-10-14, container node:20.19.6-alpine (npm 10.8.2), clean npm ci, no .env, no .git
+# infra: docker-compose.test.yml (tmpfs, throwaway credentials) on network zetheta-notify-test_default
+# format:check ok · lint ok · typecheck ok · build ok · migrate (CI step) applied 3 · npm audit --omit=dev: 0 vulnerabilities
+# npx jest --runInBand --coverage --forceExit (npm run test:coverage) — projects: unit 12 suites, integration 10, e2e 1 (13 tests incl. 7 compliance flows)
+Test Suites: 23 passed, 23 total
+Tests:       386 passed, 386 total
+
+--------------------------------------|---------|----------|---------|---------|--------------------------------------------------------
+File                                  | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                      
+--------------------------------------|---------|----------|---------|---------|--------------------------------------------------------
+All files                             |   93.11 |    81.06 |   92.61 |   95.62 |                                                        
+ src                                  |   95.63 |    78.26 |   93.93 |   95.91 |                                                        
+  app.ts                              |   93.43 |    73.77 |   91.17 |   93.98 | 116,122,217-218,236,286,319-320                        
+  container.ts                        |   98.79 |    86.95 |   98.18 |   98.63 | 127,373                                                
+  socket.ts                           |   90.24 |     87.5 |      80 |    92.1 | 50-51,56                                               
+ src/analytics                        |    98.7 |    88.34 |     100 |     100 |                                                        
+  feature-store.ts                    |     100 |    83.33 |     100 |     100 | 56-62,69                                               
+  service.ts                          |   98.13 |    89.47 |     100 |     100 | 93,172-234,247,267-274,280,322,413-478                 
+ src/api                              |     100 |      100 |     100 |     100 |                                                        
+  mappers.ts                          |     100 |      100 |     100 |     100 |                                                        
+ src/api/middleware                   |   92.77 |    84.61 |     100 |   96.27 |                                                        
+  auth-service.ts                     |      90 |    78.94 |     100 |   96.82 | 149,204                                                
+  http.ts                             |   94.28 |    86.95 |     100 |   95.74 | 154,159,202,206                                        
+  permissions.ts                      |     100 |      100 |     100 |     100 |                                                        
+ src/api/routes                       |    95.1 |    73.25 |   95.77 |   96.61 |                                                        
+  auth-events.ts                      |     100 |    86.36 |     100 |     100 | 265,278-279                                            
+  compliance-templates.ts             |   94.31 |       70 |     100 |   95.34 | 128,355,371,419                                        
+  notifications.ts                    |   95.71 |    73.61 |     100 |   98.46 | 312                                                    
+  ops.ts                              |   90.24 |    68.42 |   81.25 |   93.16 | 60,163,218,334,489,492,498,504                         
+  users.ts                            |    99.4 |       80 |     100 |   99.36 | 388                                                    
+  webhooks.ts                         |    90.9 |    66.03 |     100 |    93.9 | 75-81,86                                               
+ src/api/validators                   |   98.14 |    73.68 |    92.3 |     100 |                                                        
+  pdf-contract.ts                     |   96.96 |    73.68 |   91.66 |     100 | 57-71                                                  
+  schemas.ts                          |     100 |      100 |     100 |     100 |                                                        
+ src/compliance                       |   97.26 |    91.83 |     100 |     100 |                                                        
+  consent-repository.ts               |   91.66 |    85.71 |     100 |     100 | 44                                                     
+  consent.ts                          |     100 |       95 |     100 |     100 | 92                                                     
+  decision-repository.ts              |   97.29 |       90 |     100 |     100 | 27,116                                                 
+  decisions.ts                        |     100 |      100 |     100 |     100 |                                                        
+ src/compliance/dnd                   |   93.54 |    90.47 |   76.92 |   96.42 |                                                        
+  dnd.ts                              |   91.48 |    91.42 |   66.66 |   95.34 | 55-56                                                  
+  redis-dnd-cache.ts                  |     100 |    85.71 |     100 |     100 | 33                                                     
+ src/compliance/frequency-cap         |   99.05 |    91.78 |     100 |     100 |                                                        
+  frequency-capper.ts                 |   99.05 |    91.78 |     100 |     100 | 123,196-198,250,276                                    
+ src/compliance/quiet-hours           |   97.77 |    93.33 |     100 |     100 |                                                        
+  quiet-hours.ts                      |   97.77 |    93.33 |     100 |     100 | 41,72                                                  
+ src/config                           |    97.4 |    84.78 |     100 |   97.14 |                                                        
+  env.ts                              |      98 |    89.18 |     100 |   97.67 | 166                                                    
+  policy.ts                           |   96.29 |    66.66 |     100 |   96.29 | 123                                                    
+ src/database                         |   83.33 |       50 |   77.77 |   85.71 |                                                        
+  knex.ts                             |   83.33 |       50 |   77.77 |   85.71 | 58-59                                                  
+ src/database/migrations              |       0 |      100 |       0 |       0 |                                                        
+  20261011000001_initial_schema.ts    |       0 |      100 |       0 |       0 | 7-451                                                  
+  20261012000001_pdf_alignment.ts     |       0 |      100 |       0 |       0 | 11-45                                                  
+  20261012000002_template_ab_tests.ts |       0 |      100 |       0 |       0 | 4-14                                                   
+ src/database/models                  |   88.02 |    80.67 |    92.1 |    96.5 |                                                        
+  audit.ts                            |    92.3 |    86.66 |     100 |     100 | 39-40                                                  
+  contacts.ts                         |      92 |    85.71 |     100 |   95.83 | 34                                                     
+  notification-repository.ts          |   88.37 |    84.84 |    90.9 |   94.28 | 42,81                                                  
+  user-repository.ts                  |   86.04 |    75.43 |    90.9 |   97.29 | 245-246                                                
+ src/database/seeds                   |   95.12 |       75 |     100 |     100 |                                                        
+  synthetic.ts                        |   95.12 |       75 |     100 |     100 | 36-47                                                  
+ src/delivery                         |   89.36 |    82.35 |   89.28 |   93.39 |                                                        
+  dispatcher.ts                       |   89.36 |    82.35 |   89.28 |   93.39 | 77,203-214,220-227,270-281,446,570,654,671-672,709-713 
+ src/delivery/circuit-breaker         |   97.33 |    85.41 |     100 |   98.55 |                                                        
+  circuit-breaker.ts                  |   96.55 |    83.78 |     100 |   98.11 | 47                                                     
+  redis-circuit-store.ts              |     100 |     90.9 |     100 |     100 | 85                                                     
+ src/delivery/dlq                     |   86.31 |    76.38 |     100 |   91.25 |                                                        
+  repository.ts                       |   82.22 |    78.57 |     100 |   82.35 | 79-84                                                  
+  service.ts                          |      90 |    73.33 |     100 |   97.82 | 39                                                     
+ src/delivery/providers               |   89.74 |    76.86 |    77.9 |   91.11 |                                                        
+  fcm.ts                              |   91.66 |       76 |   66.66 |   93.02 | 138-148                                                
+  mock.ts                             |   87.17 |    73.68 |   84.21 |   91.54 | 48,148-153,159,168,205                                 
+  msg91.ts                            |      85 |    86.66 |      40 |   83.33 | 73-83                                                  
+  provider.ts                         |    87.8 |    82.35 |     100 |   87.87 | 106,121,130-131                                        
+  registry.ts                         |   94.94 |    79.54 |     100 |   95.45 | 144-154,162-171                                        
+  smtp.ts                             |   81.08 |    74.35 |      50 |   82.85 | 87,100,114-133                                         
+  socketio.ts                         |   91.66 |       50 |   83.33 |      90 | 42                                                     
+  twilio.ts                           |   94.44 |    85.71 |   85.71 |   96.87 | 119                                                    
+  whatsapp.ts                         |   84.21 |    56.25 |      40 |   84.21 | 90-100                                                 
+ src/delivery/retry                   |     100 |      100 |     100 |     100 |                                                        
+  backoff.ts                          |     100 |      100 |     100 |     100 |                                                        
+  retry-scheduler.ts                  |     100 |      100 |     100 |     100 |                                                        
+ src/delivery/webhooks                |      96 |    85.24 |     100 |     100 |                                                        
+  service.ts                          |   95.34 |    80.55 |     100 |     100 | 94-137,153                                             
+  signatures.ts                       |   96.87 |       92 |     100 |     100 | 58-68                                                  
+ src/events                           |   92.09 |    77.68 |   96.15 |    94.4 |                                                        
+  ingestion.ts                        |    96.1 |    83.33 |     100 |   98.61 | 236                                                    
+  processor.ts                        |      89 |    75.29 |   91.66 |   91.01 | 110-111,222-226,238-255,309                            
+ src/events/models                    |   93.75 |     87.8 |     100 |    97.1 |                                                        
+  fixtures.ts                         |     100 |      100 |     100 |     100 |                                                        
+  taxonomy.ts                         |   93.58 |     87.8 |     100 |   97.01 | 111,113                                                
+ src/events/validators                |   91.25 |    85.88 |    90.9 |   95.52 |                                                        
+  envelope.ts                         |     100 |      100 |     100 |     100 |                                                        
+  payload.ts                          |    90.9 |    85.88 |    90.9 |   95.31 | 114-115,150                                            
+ src/infrastructure/kafka             |   90.19 |     60.6 |   88.23 |    91.3 |                                                        
+  kafka.ts                            |   90.19 |     60.6 |   88.23 |    91.3 | 36,56-57,138                                           
+ src/infrastructure/outbox            |   91.46 |    81.81 |      90 |    97.1 |                                                        
+  outbox.ts                           |   91.46 |    81.81 |      90 |    97.1 | 114,162                                                
+ src/infrastructure/rabbitmq          |   86.81 |     62.5 |   76.92 |   90.24 |                                                        
+  rabbitmq.ts                         |   86.81 |     62.5 |   76.92 |   90.24 | 72,88,164-172                                          
+ src/infrastructure/redis             |   77.77 |      100 |   66.66 |   77.77 |                                                        
+  redis.ts                            |   77.77 |      100 |   66.66 |   77.77 | 9,18                                                   
+ src/notifications/engine             |   93.43 |    76.56 |   97.72 |   97.17 |                                                        
+  factory.ts                          |   96.15 |    94.44 |     100 |     100 | 90                                                     
+  scheduler.ts                        |   95.04 |    76.71 |   96.55 |   96.33 | 71-76,154                                              
+  service.ts                          |    87.8 |    67.64 |     100 |   97.14 | 53                                                     
+  user-context.ts                     |      90 |    66.66 |     100 |     100 | 34                                                     
+ src/notifications/routing            |    97.9 |    89.44 |   93.54 |   98.25 |                                                        
+  budget.ts                           |   93.33 |    66.66 |      90 |   91.66 | 26-30                                                  
+  routing-engine.ts                   |   98.75 |    91.78 |   95.23 |   99.32 | 280                                                    
+ src/notifications/state-machine      |   96.15 |    87.87 |     100 |   97.95 |                                                        
+  lifecycle.ts                        |   97.05 |    88.88 |     100 |   96.96 | 56                                                     
+  state-machine.ts                    |   94.44 |    83.33 |     100 |     100 | 52                                                     
+ src/preferences                      |    95.5 |    95.65 |     100 |    95.4 |                                                        
+  resolver.ts                         |   94.87 |    95.65 |     100 |   94.73 | 57-58,76-77                                            
+  types.ts                            |     100 |      100 |     100 |     100 |                                                        
+ src/templates/definitions            |     100 |    88.88 |     100 |     100 |                                                        
+  source.ts                           |     100 |    88.88 |     100 |     100 | 70                                                     
+ src/templates/engine                 |   92.12 |     81.3 |   96.22 |   96.87 |                                                        
+  engine.ts                           |   93.59 |    80.39 |   96.55 |   96.68 | 109,174,278-279,329,362                                
+  repository.ts                       |   85.39 |    78.68 |   94.73 |      96 | 157-161                                                
+  sms.ts                              |     100 |    90.62 |     100 |     100 | 37-44,64                                               
+ src/templates/locales                |     100 |      100 |     100 |     100 |                                                        
+  index.ts                            |     100 |      100 |     100 |     100 |                                                        
+ src/utils                            |   92.11 |    77.68 |   95.23 |   96.15 |                                                        
+  clock.ts                            |     100 |        0 |     100 |     100 | 10                                                     
+  context.ts                          |     100 |      100 |     100 |     100 |                                                        
+  crypto.ts                           |   95.65 |    82.85 |     100 |     100 | 35-41,61,99,128,132                                    
+  errors.ts                           |      90 |    66.66 |      90 |    93.1 | 98-99                                                  
+  logger.ts                           |     100 |       50 |     100 |     100 | 23-32                                                  
+  metrics.ts                          |   54.54 |        0 |       0 |      60 | 11-14                                                  
+  pii.ts                              |   88.33 |    83.72 |     100 |   97.61 | 76                                                     
+  rate-limiter.ts                     |     100 |    76.47 |     100 |     100 | 105-116                                                
+  types.ts                            |   91.66 |      100 |       0 |   91.66 | 50                                                     
+ src/workers                          |   91.71 |    67.44 |   88.37 |   93.33 |                                                        
+  bootstrap.ts                        |     100 |    57.14 |     100 |     100 | 14-35                                                  
+  workers.ts                          |   90.78 |    69.44 |   88.09 |   92.53 | 133-137,165,193,212,280,336-337,345,379                
+--------------------------------------|---------|----------|---------|---------|--------------------------------------------------------
+

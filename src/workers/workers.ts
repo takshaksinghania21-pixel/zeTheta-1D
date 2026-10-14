@@ -1,16 +1,16 @@
 import type { Consumer } from 'kafkajs';
 import { z } from 'zod';
 import type { Container } from '../container';
-import { runWithContext, normaliseCorrelationId } from '../common/context';
-import { NonRetryableError } from '../common/errors';
-import { metrics } from '../common/metrics';
-import { sanitizeForLog } from '../common/pii';
-import { CHANNELS, type Channel } from '../domain/types';
+import { runWithContext, normaliseCorrelationId } from '../utils/context';
+import { NonRetryableError } from '../utils/errors';
+import { metrics } from '../utils/metrics';
+import { sanitizeForLog } from '../utils/pii';
+import { CHANNELS, type Channel } from '../utils/types';
 import { consumerLag, headerString, runConsumer } from '../infrastructure/kafka/kafka';
 import { enqueueOutbox } from '../infrastructure/outbox/outbox';
 import { consumeQueue, queueDepths } from '../infrastructure/rabbitmq/rabbitmq';
-import { kafkaEventSchema } from '../modules/events/ingestion';
-import type { LifecycleEvent } from '../modules/notifications/types';
+import { kafkaEventSchema } from '../events/validators/envelope';
+import type { LifecycleEvent } from '../database/models/notification';
 
 export interface RunningWorker {
   name: string;
@@ -336,7 +336,14 @@ export async function startAnalytics(c: Container): Promise<RunningWorker> {
         log.error({ offset: message.offset }, 'unparseable lifecycle event skipped');
         return;
       }
-      await c.analytics().ingest(event);
+      // Real-time counters / engagement are best effort: the PostgreSQL aggregate is authoritative.
+      if (await c.analytics().ingest(event))
+        await c
+          .features()
+          .record(event)
+          .catch((err: unknown) => {
+            log.warn({ err }, 'feature store update failed');
+          });
     },
     log,
   );

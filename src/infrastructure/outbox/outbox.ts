@@ -1,7 +1,7 @@
 import type { Knex } from 'knex';
 import type { Producer } from 'kafkajs';
-import type { Logger } from '../../common/logger';
-import { metrics } from '../../common/metrics';
+import type { Logger } from '../../utils/logger';
+import { metrics } from '../../utils/metrics';
 import type { RabbitConnection } from '../rabbitmq/rabbitmq';
 
 export interface KafkaOutboxMessage {

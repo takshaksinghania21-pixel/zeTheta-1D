@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import http from 'node:http';
 import { Container } from '../container';
-import { enableDefaultMetrics, registry } from '../common/metrics';
+import { enableDefaultMetrics, registry } from '../utils/metrics';
 import { loadConfig } from '../config/env';
-import { CHANNELS, isChannel, type Channel } from '../domain/types';
+import { CHANNELS, isChannel, type Channel } from '../utils/types';
 import { ensureInfrastructure } from './bootstrap';
 import {
   startAnalytics,

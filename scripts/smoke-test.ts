@@ -10,7 +10,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
-const creds = JSON.parse(readFileSync('.local/seed-credentials.json', 'utf8')) as {
+// SEED_CREDENTIALS_FILE lets the smoke test target another stack (e.g. Docker Compose).
+const credsFile = process.env.SEED_CREDENTIALS_FILE ?? '.local/seed-credentials.json';
+const creds = JSON.parse(readFileSync(credsFile, 'utf8')) as {
   admin: { username: string; password: string };
   operator: { username: string; password: string };
   service: { clientId: string; clientSecret: string };
@@ -204,15 +206,21 @@ async function main(): Promise<void> {
     };
   });
 
-  await step(6, 'Templates rendered per channel', async () => {
+  await step(6, 'Templates rendered per channel (SMS forced by the SEBI mandate)', async () => {
     const ns = status.body.notifications as {
       channel: string;
       title: string | null;
       body: string | null;
     }[];
+    const decisions = status.body.decisions as { rule: string; channel: string | null }[];
+    // TXNX-001 is SEBI-mandated on SMS (PDF §A2), so SMS is sent although step 2 disabled it.
     return {
-      ok: ns.length === 3 && ns.every((n) => n.body?.includes('INFY')),
-      detail: ns.map((n) => `${n.channel}: ${n.title}`),
+      ok:
+        ['push', 'email', 'inapp', 'sms'].every((ch) => ns.some((n) => n.channel === ch)) &&
+        ns.length === 4 &&
+        ns.every((n) => n.body?.includes('INFY')) &&
+        decisions.some((d) => d.channel === 'sms' && d.rule === 'REGULATORY_MANDATORY_CHANNEL'),
+      detail: ns.map((n) => `${n.channel}: ${n.body?.slice(0, 40) ?? null}`),
     };
   });
 

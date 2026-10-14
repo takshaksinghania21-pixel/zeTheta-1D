@@ -7,7 +7,7 @@
   "submission_type": "github",
   "tech_stack": ["TypeScript", "Node.js", "PostgreSQL", "Redis", "Kafka", "RabbitMQ", "Docker"],
   "duration_days": 15,
-  "github_repo_url": "https://github.com/[YOUR_USERNAME]/BE-6B-NotificationEngine-[YourName]",
+  "github_repo_url": "https://github.com/takshaksinghania21-pixel/zeTheta-1D",
   "assessment_criteria": {
     "event_driven_architecture": true,
     "multi_channel_delivery": true,

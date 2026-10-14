@@ -5,88 +5,116 @@ market alerts, regulatory notices) into compliant, personalised notifications
 across **SMS, email, push, WhatsApp and in-app**, with durable asynchronous
 processing, retries, a dead-letter queue, analytics and an operator API.
 
-> Status: implemented and verified locally against real PostgreSQL, Redis,
-> Kafka and RabbitMQ (see [Verification](#verification-summary)). Docker images
-> and the GitHub Actions workflow are written but were **not executed** (no
-> Docker on the authoring machine). Not production-ready — see
+> **Status.** Implemented and verified locally against real PostgreSQL, Redis,
+> Kafka and RabbitMQ, and as a Docker Compose deployment (Docker Desktop 29.8,
+> Node 20.19.6 image; see [Verification](#verification-summary)). The GitHub
+> Actions workflow has **not run** (no remote repository) and provider adapters
+> were exercised against local stubs and mocks only. Not production-ready — see
 > [Known limitations](#known-limitations).
+>
+> The assignment PDF was audited requirement by requirement:
+> [docs/TRACEABILITY.md](docs/TRACEABILITY.md) ·
+> [docs/FINAL_GAP_ANALYSIS.md](docs/FINAL_GAP_ANALYSIS.md) ·
+> [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 ## Key features
 
-- **25 financial event types** in five categories, defined in
-  [`config/event-taxonomy.yaml`](config/event-taxonomy.yaml) and compiled to strict
-  schemas; new event types need configuration + templates only.
-- **Pipeline:** REST ingestion → idempotency → transactional outbox → Kafka →
-  enrichment → preferences/consent/DND → quiet hours → frequency caps → templates
-  → RabbitMQ priority queues → provider adapters → signed receipts → analytics.
-- **Preference hierarchy** system → segment → user → regulatory override, with
-  per-value provenance and auditable typed policy decisions.
-- **Compliance:** consent ledger (separate WhatsApp opt-in), DND registry
-  abstraction with cache/staleness rules, promotional vs transactional handling.
+- **25 financial event types** in five categories (PDF §A2) defined in
+  [`config/event-taxonomy.yaml`](config/event-taxonomy.yaml) (copies at
+  `docs/event-taxonomy.yaml` and `src/events/taxonomy.yaml`) and compiled to strict
+  schemas; urgency, channels, latency objectives and SEBI/exchange-mandated
+  channels follow the PDF; every event is TRANSACTIONAL or PROMOTIONAL.
+- **Pipeline:** REST ingestion (native or PDF Appendix A contract) → idempotency
+  and storm dedup → transactional outbox → Kafka (`notification-events`, CRITICAL
+  on `notification-critical` with its own consumer group) → enrichment →
+  preferences/consent → engagement & cost optimisation → quiet hours → frequency
+  caps → templates (A/B variants) → RabbitMQ priority queues → **DND re-check at
+  dispatch** → provider adapters → signed receipts → analytics.
+- **Routing (PDF §A3.2):** regulatory override → user preferences → delivery
+  optimisation from per-user engagement history (Redis feature store) → cost
+  optimisation with per-user day/month budgets.
+- **Compliance:** consent ledger (separate WhatsApp opt-in), DND registry with a
+  24-hour freshness rule, dispatch-time DND decisions persisted as audit proof, DND
+  violation self-audit gauge and alert.
 - **Frequency caps** (Redis Lua, atomic, idempotent): 12/day global, SMS 5, push
-  8, email 3, 3/hour per category, 15-minute same-event cooldown, exemptions.
-- **Quiet hours** per IANA timezone (DST-safe, ≥ 6 h), critical bypass with
-  audit, durable deferral, morning digest when > 5 notifications were deferred.
-- **Templates:** Handlebars sandbox, 5 locales (en, hi, mr, ta, te) × 26 templates
-  × 5 channels, versioning, preview, SMS segment rules, safe HTML email.
-- **Delivery:** Twilio + MSG91 (SMS), Nodemailer SMTP/Ethereal, FCM HTTP v1,
-  WhatsApp Cloud API, Socket.IO in-app, and mock providers with failure injection.
-  Failover, circuit breakers, provider rate limits, timeouts, error classification.
-- **Retries/DLQ:** per-priority exponential backoff with jitter on RabbitMQ delay
-  bands, durable state in PostgreSQL, DLQ with operator retry/resolve/discard.
+  8, email 3, 3/hour per category, 15-minute same-type cooldown (configurable per
+  event), digest suggestion above 8/day over 7 days.
+- **Quiet hours** per IANA timezone (DST-safe, ≥ 6 h), CRITICAL bypass with audit,
+  durable deferral, morning digest when > 5 notifications were deferred.
+- **Templates:** Handlebars sandbox, 5 locales (en, hi, mr, ta, te), channel
+  formats, versioning with deterministic A/B experiments, preview, SMS ≤ 160
+  characters with ellipsis + link, safe HTML email.
+- **Delivery:** Twilio + MSG91 (SMS), Nodemailer SMTP, FCM HTTP v1, WhatsApp Cloud
+  API, Socket.IO in-app, mock providers with failure injection. Failover, circuit
+  breakers (5 failures / 60 s, 60 s open), provider rate limits with a reserved
+  share for CRITICAL traffic, timeouts, error classification.
+- **Retries/DLQ:** per-priority exponential backoff with jitter scheduled in a
+  **Redis sorted set** (PDF Day 9), durable state in PostgreSQL, DLQ with
+  automated classification (transient / permanent / configuration) and operator
+  retry/resolve/discard; manual-call escalation for undeliverable margin calls.
 - **Security:** JWT + refresh rotation, RBAC (ADMIN/OPERATOR/SERVICE/USER), Zod
-  validation, rate limits, webhook signatures, AES-256-GCM contact encryption,
-  PII-safe logs, audit log, retention and anonymisation.
-- **Observability:** JSON logs with correlation ids, Prometheus `/metrics`,
-  health/readiness, OpenAPI 3.0 + Swagger UI, Postman collection.
+  strict validation, Redis sliding-window rate limits, webhook signatures,
+  AES-256-GCM contact encryption, PII-masked logs (`+91XXXX1234`,
+  `s***@domain.com`), audit log, 90-day retention, anonymisation.
+- **Observability:** JSON logs (`timestamp, level, message, correlation_id,
+service_name`), Prometheus `/metrics` with the §A11.1 metric names, the seven
+  §A11.2 alert rules ([`config/prometheus-alerts.yml`](config/prometheus-alerts.yml)),
+  `/health`, OpenAPI 3.0 + Swagger UI at `/api-docs`, Postman collection.
 
 ## Architecture summary
 
 ```
-POST /events ─► PostgreSQL (event + outbox) ─► relay ─► Kafka financial-events.v1
-                                                          │
-                                       event-consumer ◄───┘  (routing, compliance,
-                                          │                    caps, quiet hours,
-                                          ▼                    templates)
+POST /api/v1/events ─► PostgreSQL (event + outbox) ─► relay ─► Kafka notification-events
+                                                                 │      notification-critical
+                                  event-consumer / critical-consumer ◄─┘
+                                          │ routing · compliance · caps · quiet hours · templates
+                                          ▼
                        PostgreSQL (notifications, history, decisions, outbox)
                                           │ relay
                                           ▼
-                           RabbitMQ delivery.<channel> (priority)
+                           RabbitMQ delivery.<channel> (priority queues)
                                           │
-                              dispatcher ─┴─► providers ─► webhooks ─► DELIVERED/READ
-                                          │
-                     lifecycle events ─► Kafka ─► analytics aggregates
+              dispatcher ─ DND re-check ─┴─► providers ─► webhooks ─► DELIVERED/READ
+                  │ transient failure                          │
+                  ▼                                            ▼
+        Redis ZSET retry schedule              lifecycle events ─► Kafka ─► analytics
+                                                               (PostgreSQL aggregates + Redis counters)
 ```
 
-Details, sequence diagrams and the ER diagram: [ARCHITECTURE.md](ARCHITECTURE.md).
+C4 views, the §E2 source layout and component map: [docs/architecture.md](docs/architecture.md).
+Sequence diagrams: [docs/sequence-diagrams/](docs/sequence-diagrams/). Data model:
+[docs/database-schema.md](docs/database-schema.md). Design decisions and failure
+handling: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Technology stack
 
-| Concern            | Choice (pinned in `package.json`)                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Runtime / language | Node.js 20 LTS (Docker/CI), TypeScript 5.9 strict                                                                  |
-| HTTP               | Express 5, Helmet, CORS, Zod 4, zod-to-openapi, swagger-ui-express                                                 |
-| Data               | PostgreSQL 16 via Knex 3 (+ pg), Redis 7/8 via ioredis                                                             |
-| Messaging          | Apache Kafka 4.3 (kafkajs), RabbitMQ 4.3 (amqplib)                                                                 |
-| Templates          | Handlebars 4.7.10, Luxon (time zones)                                                                              |
-| Providers          | Twilio REST, MSG91 Flow API, Nodemailer 10, FCM HTTP v1, WhatsApp Cloud API, Socket.IO 4 (+ Redis adapter/emitter) |
-| Observability      | pino, prom-client                                                                                                  |
-| Tests              | Jest 30, ts-jest, Supertest, socket.io-client, smtp-server                                                         |
-| Load               | k6                                                                                                                 |
-| Delivery           | Docker, Docker Compose, GitHub Actions                                                                             |
+| Concern            | Choice (pinned in `package.json`)                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| Runtime / language | Node.js 20 LTS (Docker/CI), TypeScript 5.9 strict                                          |
+| HTTP               | Express 5, Helmet, CORS, Zod 4, zod-to-openapi, swagger-ui-express                         |
+| Data               | PostgreSQL 15+ (verified on 16) via Knex 3 (+ pg), Redis 7+ via ioredis                    |
+| Messaging          | Kafka (Confluent 7.5 in Compose; Apache 4.3 locally) via kafkajs, RabbitMQ 3.12+ (amqplib) |
+| Templates          | Handlebars 4.7.10, Luxon (time zones)                                                      |
+| Providers          | Twilio REST, MSG91 Flow API, Nodemailer 10, FCM HTTP v1, WhatsApp Cloud API, Socket.IO 4   |
+| Observability      | pino, prom-client                                                                          |
+| Tests              | Jest 30 (`jest.config.ts`, ts-node), ts-jest, Supertest, socket.io-client, smtp-server     |
+| Load               | k6 ([`tests/load/`](tests/load/))                                                          |
+| Delivery           | Docker (multi-stage, Alpine), Docker Compose, GitHub Actions                               |
 
 ## Prerequisites
 
-- Node.js ≥ 20.11 (verified on 26.8.2 locally; Docker/CI use 20.19.6 as required
-  by the assignment — note Node 20 is past end-of-life since 2026-04-30).
-- PostgreSQL 15+, Redis 7+, Kafka 3.6+/4.x (KRaft), RabbitMQ 3.12+ — either via
-  Docker Compose or installed locally.
-- Optional: k6 (load tests).
+- Node.js ≥ 20.11 (local verification used 26.8.2; Docker/CI use 20.19.6 as the
+  assignment requires — Node 20 reached end-of-life on 2026-04-30).
+- PostgreSQL 15+, Redis 7+, Kafka, RabbitMQ 3.12+ — via Docker Compose or local installs.
+- Optional: k6 (load tests), openssl (Compose TLS certificate).
 
 ## Local installation
 
 ```bash
 npm ci
+```
+
+```bash
 cp .env.example .env        # then replace every CHANGE_ME value
 ```
 
@@ -100,10 +128,14 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-### Start infrastructure — Docker (written, not verified locally)
+### Start infrastructure — Docker (verified)
 
 ```bash
-docker compose up -d postgres redis kafka rabbitmq
+scripts/dev-certs.sh
+```
+
+```bash
+docker compose up -d postgres redis zookeeper kafka rabbitmq
 ```
 
 ### Start infrastructure — without Docker (verified)
@@ -124,12 +156,23 @@ npm run infra:local -- start
 
 ```bash
 npm run migrate          # applies migrations (DATABASE_URL)
-npm run seed             # templates, principals, 6 synthetic users, DND fixtures
 ```
 
-The seed writes generated credentials to `.local/seed-credentials.json`
-(git-ignored, mode 0600): `admin`/`operator` (password grant),
-`trading-platform` (client credentials, SERVICE role) and demo end user `asha`.
+```bash
+npm run seed             # templates, principals, demo users + 1 000 synthetic users, DND fixtures
+```
+
+The seed is idempotent and writes generated credentials to
+`.local/seed-credentials.json` (git-ignored, mode 0600): `admin`/`operator`
+(password grant), `trading-platform` (client credentials, SERVICE role) and demo
+end user `asha`. `SEED_BULK_USERS` changes the synthetic user count.
+
+Simulated datasets for PDF §B4 (100 000 events, 10 000 profiles, 5 000 failures,
+2 000 complaints; deterministic, exact distributions) are generated on demand:
+
+```bash
+npm run datasets         # writes data/simulated/*.csv (git-ignored, ~30 MB)
+```
 
 ## Starting the API and workers
 
@@ -143,24 +186,51 @@ Separate processes (production-like):
 
 ```bash
 npm run build
+```
+
+```bash
 node dist/src/server.js
+```
+
+```bash
 node dist/src/workers/main.js outbox-relay,event-consumer,scheduler,dlq-ingest
+```
+
+```bash
+node dist/src/workers/main.js critical-consumer,outbox-relay
+```
+
+```bash
 node dist/src/workers/main.js dispatcher
+```
+
+```bash
 node dist/src/workers/main.js analytics
 ```
 
-Workers serve `/health/live`, `/health/ready` and `/metrics` on `METRICS_PORT`.
+Workers serve `/health/live`, `/health/ready` and `/metrics` on `METRICS_PORT`;
+the API also serves `/health` (all dependencies and providers).
 
 ## API documentation
 
-- Swagger UI: <http://localhost:3000/api/docs>
-- OpenAPI 3.0 JSON: <http://localhost:3000/api/v1/openapi.json> and
+- Swagger UI: <http://localhost:3000/api-docs> (also `/api/docs`)
+- OpenAPI 3.0: <http://localhost:3000/api/v1/openapi.json>,
+  [`docs/api-specification.yaml`](docs/api-specification.yaml) and
   [`docs/openapi.json`](docs/openapi.json) (`npm run openapi:generate`)
 - Postman: [`docs/postman/zetheta-notification-engine.postman_collection.json`](docs/postman/zetheta-notification-engine.postman_collection.json) (`npm run postman:generate`)
 
 The spec is generated from the same route definitions that register the Express
-handlers; in non-production modes every response is validated against its
-declared schema.
+handlers; outside production every response is validated against its schema.
+
+### PDF Appendix A contracts
+
+The PDF's snake*case request/response shapes are supported alongside the native
+camelCase API: `POST /api/v1/events` with the Appendix A envelope (answered with
+`notification_id`, `channels_targeted`, `estimated_delivery_ms`, and
+`VALIDATION_FAILED` 422 errors), `GET`/`PUT /api/v1/users/:userId/preferences`,
+`GET /api/v1/analytics/delivery-rates?period=7d&channel=all`, and
+`GET /api/v1/notifications/:notificationId` with `state_history` and the
+`compliance` evidence block. `usr*`-prefixed user ids are accepted.
 
 ### Example requests
 
@@ -171,21 +241,24 @@ TOKEN=$(curl -s localhost:3000/api/v1/auth/token -H 'content-type: application/j
 
 ```bash
 curl -s localhost:3000/api/v1/events -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{
-  "eventType": "RISK-001",
-  "userId": "<user id>",
-  "occurredAt": "2026-01-15T14:00:00+05:30",
-  "payload": { "marginCallId": "MC-1", "marginRequired": "125000", "marginAvailable": "80000",
-               "utilisationPercent": 156.25, "deadline": "2026-01-15T15:30:00+05:30" } }'
+  "event_type": "RISK-001", "event_id": "EVT-2099-03-19-MC-1", "source_system": "margin_engine",
+  "timestamp": "2099-03-19T10:15:23.456Z", "priority": 1, "user_id": "usr_<user uuid>",
+  "payload": { "shortfall_amount": 125000.00, "current_margin": 375000.00, "required_margin": 500000.00,
+               "deadline": "2099-03-19T11:30:00.000Z",
+               "affected_positions": [{ "symbol": "RELIANCE", "qty": 500, "current_value": 620000.00 }],
+               "auto_square_off_time": "2099-03-19T12:00:00.000Z" },
+  "idempotency_key": "margin-call-usr_a1b2c3d4-2099-03-19T10:15" }'
 ```
 
 ```bash
-curl -s localhost:3000/api/v1/events/<eventId> -H "authorization: Bearer $TOKEN"
+curl -s localhost:3000/api/v1/events/<notification_id> -H "authorization: Bearer $TOKEN"
 ```
 
-Other useful endpoints: `GET /api/v1/notifications?eventId=…`,
-`GET /api/v1/notifications/{id}/history`, `PUT /api/v1/users/{id}/preferences/quiet-hours`,
-`POST /api/v1/compliance/evaluate` (dry run), `GET /api/v1/dlq`,
-`POST /api/v1/dlq/{id}/retry`, `GET /api/v1/analytics/summary`,
+Other useful endpoints: `GET /api/v1/notifications/{id}`,
+`PUT /api/v1/users/{id}/preferences`, `POST /api/v1/compliance/evaluate` (dry run),
+`GET /api/v1/dlq?classification=TRANSIENT`, `POST /api/v1/dlq/{id}/retry`,
+`GET /api/v1/analytics/realtime`, `GET /api/v1/analytics/channel-performance`,
+`POST /api/v1/templates/{id}/experiment`,
 `POST /api/v1/ops/providers/mock-push/simulate` (mock mode only).
 
 ## Provider sandbox configuration
@@ -203,75 +276,131 @@ their credentials (`.env.example`):
 | WhatsApp | `whatsapp-cloud`  | Meta test phone number + temporary access token                                    |
 | In-app   | `socketio`        | built in; clients connect to `/socket.io` with a USER token                        |
 
-Real providers were verified against local HTTP/SMTP stubs only; no real
-sandbox account was used.
+Real providers were verified against local HTTP/SMTP stubs only; no sandbox
+account was used and no real message was sent. APNs direct failover is not
+implemented (see [docs/FINAL_GAP_ANALYSIS.md](docs/FINAL_GAP_ANALYSIS.md)).
 
 ## Running tests
 
 ```bash
 npm run test:unit          # no infrastructure needed
+```
+
+```bash
 npm run test:integration   # needs PostgreSQL (zetheta_test), Redis DB 6, Kafka, RabbitMQ
+```
+
+```bash
 npm run test:e2e           # full pipeline with all workers in-process
-npm run test:coverage      # everything + coverage thresholds
-npm run smoke              # 15-step functional smoke test against a running stack
+```
+
+```bash
+npm run test:coverage      # everything + 80% thresholds on all four metrics
+```
+
+```bash
+npm run smoke              # functional smoke test against a running stack
 ```
 
 Integration tests use `zetheta_test`, Redis DB 6 and per-run Kafka/RabbitMQ name
 prefixes; they never touch development data. Override with `TEST_DATABASE_URL`,
-`TEST_REDIS_URL`, `TEST_KAFKA_BROKERS`, `TEST_RABBITMQ_URL`.
-
-### Coverage
-
-`npm run test:coverage` writes `coverage/` (lcov + summary). Thresholds:
-statements/lines/functions 80 %, branches 70 %. Latest measured numbers:
-[docs/TESTING.md](docs/TESTING.md).
+`TEST_REDIS_URL`, `TEST_KAFKA_BROKERS`, `TEST_RABBITMQ_URL`. Load tests and their
+results: [docs/performance-benchmarks.md](docs/performance-benchmarks.md).
 
 ## Verification summary
 
-| Check                                                                   | Result                                                                  |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Unit + integration + e2e tests                                          | all passing — counts and coverage in [docs/TESTING.md](docs/TESTING.md) |
-| ESLint (strict type-checked), Prettier, `tsc --noEmit`, `npm run build` | pass                                                                    |
-| Functional smoke test (15 steps, compiled build)                        | 15/15 — [`reports/smoke-test.json`](reports/smoke-test.json)            |
-| 10 000-event benchmark                                                  | [docs/performance-benchmarks.md](docs/performance-benchmarks.md)        |
-| `npm audit --omit=dev`                                                  | 0 vulnerabilities; dev-only findings in SECURITY.md                     |
-| Docker build / compose / CI                                             | **not executed** (see DEPLOYMENT.md)                                    |
+Latest numbers and commands: [docs/TESTING.md](docs/TESTING.md) and
+[docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
+
+| Check                                                                      | Result                                                        |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Unit + integration + e2e tests, coverage ≥ 80 % (all four metrics)         | 379/379 pass, branches 80.67 % (Node 26, 2026-10-12)          |
+| Smoke test against the compiled build (mock providers)                     | 15/15                                                         |
+| ESLint (strict type-checked), Prettier, `tsc --noEmit`, `npm run build`    | pass                                                          |
+| Load scenarios normal / 10× / 20× / market crash / critical isolation      | single laptop — [performance](docs/performance-benchmarks.md) |
+| PostgreSQL TLS (app verifies server certificate)                           | verified against a throwaway local cluster                    |
+| Docker image (Node 20.19.6, non-root, 183 MB) + Compose stack, all healthy | built and run; smoke 15/15 against the containers             |
+| PostgreSQL TLS in Compose (plaintext / untrusted CA rejected)              | verified                                                      |
+| GitHub Actions CI / real provider sandboxes                                | **not executed** (see DEPLOYMENT.md)                          |
 
 ## Troubleshooting
 
 See [docs/RUNBOOKS.md](docs/RUNBOOKS.md). Quick checks:
 
-- `GET /health/ready` shows which dependency is down.
+- `GET /health` shows which dependency or provider circuit is down.
 - Events stuck in `RECEIVED`: outbox relay not running or Kafka down
   (`GET /api/v1/ops/queues` → `outboxBacklog`).
-- Notifications stuck in `QUEUED`: no dispatcher consuming
-  (`rabbitmq.<queue>.consumers == 0`).
+- Margin calls not processed: the `critical-consumer` worker is not running.
+- Notifications stuck in `QUEUED`: no dispatcher consuming (`consumers == 0`).
+- Notifications in `RETRYING` with `LOCAL_RATE_LIMIT`: provider quota exhausted —
+  they wait for quota without spending their retry budget.
 - `401 Invalid webhook signature`: wrong secret or clock skew > 300 s.
 - Everything `QUIET` at night: quiet hours are working — check the user timezone.
 
 ## Security considerations
 
 Summary in [SECURITY.md](SECURITY.md): RBAC, token rotation, encryption at rest,
-PII masking, webhook verification, rate limiting, audit logs, and the
-**compliance assumptions that require legal verification**.
+PII masking, webhook verification, rate limiting, TLS to PostgreSQL, audit logs,
+and the **compliance assumptions that require legal review**.
 
 ## Known limitations
 
-- Docker images, Compose stacks and GitHub Actions were not run (no Docker
-  locally, no remote repository).
+- GitHub Actions has not run (no remote repository). Docker/Compose were
+  validated on Docker Desktop for macOS (arm64) only.
 - Provider adapters verified against stubs, not real sandbox accounts.
 - Delivery is at-least-once: a crash during a provider call can produce a
-  duplicate message (documented in ARCHITECTURE.md §9).
-- Benchmarks come from a single laptop; they are not production capacity claims.
-- Template translations are machine-assisted and need native-speaker review.
+  duplicate message (ARCHITECTURE.md §9).
+- Benchmarks come from one laptop running everything in one process; they are
+  not production capacity claims (see the 10× / 20× backlog results).
+- Template translations are machine-assisted and need native-speaker review;
+  TRANSACTIONAL/PROMOTIONAL classification and cap exemptions need compliance review.
 - Email open/click tracking and FCM delivery receipts are not available
   (reported as `null`, never estimated).
+- The repository layout follows PDF §E2; Kafka/RabbitMQ/Redis adapters and workers
+  live in the additional `src/infrastructure/` and `src/workers/` directories.
+
+## Document Error Log
+
+PDF §A13 states the brief contains five deliberate errors. Candidates found while
+implementing, with the handling chosen (confidence in brackets):
+
+1. **Partitioned primary key (§A8.1, p.17) [high].** `notifications.id UUID PRIMARY
+KEY` on a table `PARTITION BY RANGE (created_at)` is invalid in PostgreSQL —
+   unique constraints on a partitioned table must include the partition key — and
+   so `dead_letter_queue.notification_id REFERENCES notifications(id)` cannot exist.
+   Implemented as `PRIMARY KEY (id, created_at)`, with logical de-duplication in
+   `notification_keys`.
+2. **Expression in a primary key (§A5.2, p.13) [high].** `PRIMARY KEY (user_id,
+event_category, COALESCE(event_type,'*'), channel)` is not valid SQL; it needs a
+   unique expression index. Preferences are stored as one versioned document per
+   user (optimistic concurrency) instead.
+3. **Retry examples vs formula (§A9.1, p.19) [medium].** With
+   `baseDelay·2^attempt`, attempt 1 is 2–3 s, not "~1–2 s"; the priority table
+   skips priority 4 although the schema allows 1–5; and CRITICAL's 10 retries of up
+   to 60 s each cannot meet a < 10 s margin-call objective. The table values are
+   implemented; CRITICAL relies on failover, fallback channels and the reserved
+   provider quota instead of waiting on retries.
+4. **REGX-005 urgency (§A2.6 vs §B2.5) [medium].** REGX-005 is LOW / "< 24 hours" in
+   the taxonomy but must reach every user within 4 hours in Challenge 5. The
+   taxonomy value is implemented and the conflict documented.
+5. **Frequency-cap arithmetic (§A6.2, p.14–15) [medium].** The per-channel daily caps
+   sum to 16, above the 12/day global cap; the "> 8/day" digest threshold is tied to
+   a rolling 7-day window; and the quiet-hours digest threshold (> 5) differs from
+   Appendix B's "3+ capped". All caps are enforced independently (the global cap
+   wins), the digest suggestion uses the 7-day average, and the morning digest uses > 5.
+6. **API naming (Appendix A) [medium].** `usr_`/`ntf_`-prefixed ids contradict the
+   UUID columns of §A8; `PUT` is used for a partial (one-category) update; and the
+   202 response returns a single `notification_id` although one event fans out to
+   one notification per channel. Both id forms are accepted, `PUT` is kept as
+   specified, and the id returned is the event's request id.
 
 ## Further documentation
 
-[ARCHITECTURE.md](ARCHITECTURE.md) · [DEPLOYMENT.md](DEPLOYMENT.md) ·
+[docs/architecture.md](docs/architecture.md) · [ARCHITECTURE.md](ARCHITECTURE.md) ·
+[docs/database-schema.md](docs/database-schema.md) ·
+[docs/sequence-diagrams/](docs/sequence-diagrams/) · [DEPLOYMENT.md](DEPLOYMENT.md) ·
 [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) ·
 [CHANGELOG.md](CHANGELOG.md) · [docs/TAXONOMY.md](docs/TAXONOMY.md) ·
 [docs/TESTING.md](docs/TESTING.md) · [docs/performance-benchmarks.md](docs/performance-benchmarks.md) ·
 [docs/RUNBOOKS.md](docs/RUNBOOKS.md) · [docs/TRACEABILITY.md](docs/TRACEABILITY.md) ·
-[docs/SUBMISSION.md](docs/SUBMISSION.md)
+[docs/FINAL_GAP_ANALYSIS.md](docs/FINAL_GAP_ANALYSIS.md) · [docs/SUBMISSION.md](docs/SUBMISSION.md)

@@ -318,7 +318,7 @@ describe('Redis retry schedule (sorted set)', () => {
   });
 
   it('caps the number released per tick (retry-storm guard)', async () => {
-    const { RedisRetryScheduler } = await import('../../src/modules/retries/retry-scheduler');
+    const { RedisRetryScheduler } = await import('../../src/delivery/retry/retry-scheduler');
     const rs = new RedisRetryScheduler(
       c.redis(),
       c.db(),

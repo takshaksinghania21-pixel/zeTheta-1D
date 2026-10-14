@@ -1,6 +1,6 @@
 import request from 'supertest';
-import { SAMPLE_PAYLOADS } from '../../src/modules/taxonomy/fixtures';
-import type { NotificationRow } from '../../src/modules/notifications/types';
+import { SAMPLE_PAYLOADS } from '../../src/events/models/fixtures';
+import type { NotificationRow } from '../../src/database/models/notification';
 import { createUser, principalToken, startStack, type Stack } from '../helpers/stack';
 
 let s: Stack;

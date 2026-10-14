@@ -1,5 +1,5 @@
 import { Container } from '../../src/container';
-import { ConflictError, InvalidTransitionError } from '../../src/common/errors';
+import { ConflictError, InvalidTransitionError } from '../../src/utils/errors';
 import { migrate, truncateAll } from '../helpers/db';
 import { testConfig } from '../helpers/env';
 import { createUser, PHONE } from '../helpers/stack';

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import http from 'node:http';
 import { createApp } from './app';
-import { enableDefaultMetrics } from './common/metrics';
+import { enableDefaultMetrics } from './utils/metrics';
 import { loadConfig } from './config/env';
 import { Container } from './container';
 import { attachSocketIo } from './socket';

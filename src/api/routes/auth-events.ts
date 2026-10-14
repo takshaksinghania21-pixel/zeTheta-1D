@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { Container } from '../../container';
-import { NotFoundError } from '../../common/errors';
-import { eventEnvelopeSchema } from '../../modules/events/ingestion';
-import type { Api } from '../http';
+import { NotFoundError } from '../../utils/errors';
+import { eventEnvelopeSchema } from '../../events/validators/envelope';
+import type { Api } from '../middleware/http';
 import { camel, toNotificationDto } from '../mappers';
 import {
   camelKeys,
@@ -10,8 +10,8 @@ import {
   pdfChannel,
   pdfEventEnvelopeSchema,
   type PdfEventEnvelope,
-} from '../pdf-contract';
-import { NotificationSchema, PolicyDecisionSchema, UuidParam } from '../schemas';
+} from '../validators/pdf-contract';
+import { NotificationSchema, PolicyDecisionSchema, UuidParam } from '../validators/schemas';
 
 const EventEnvelopeSchema = eventEnvelopeSchema.meta({ id: 'EventEnvelope' });
 

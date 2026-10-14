@@ -2601,6 +2601,40 @@
           }
         },
         {
+          "name": "Per-channel counts, cost and average delivery latency for the last N minutes (Redis)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/realtime",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "realtime"
+              ]
+            }
+          }
+        },
+        {
           "name": "A/B test comparison: delivery, read and click rates per template version",
           "request": {
             "method": "GET",

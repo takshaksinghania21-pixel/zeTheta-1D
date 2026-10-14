@@ -62,7 +62,21 @@ costs:
   perMessageMicros: { sms: 180000, whatsapp: 350000, email: 10000, push: 0, inapp: 0 }
   dailyBudgetMicros: { sms: 50000000000, whatsapp: 20000000000 }
   # When a channel budget is exhausted, only these priorities may still use it
+  # [DEFAULT] per-user limits (PDF §A3.2 asks for per-user day/month budgets, no values given)
+  userDailyBudgetMicros: 2000000 # ₹2/day
+  userMonthlyBudgetMicros: 30000000 # ₹30/month
   budgetExemptPriorities: [CRITICAL, HIGH]
+# [DEFAULT] Non-critical traffic may use only 80% of a provider's per-minute quota so margin
+# calls are never throttled behind bulk traffic (§C4.3 "dedicated resources"; measured in
+# docs/performance-benchmarks.md, critical_isolation scenario).
+delivery:
+  criticalReservePercent: 20
+# [DEFAULT] §A3.2 priority 3: drop a channel the user ignores (≥ 20 deliveries, < 5% read/click)
+# and prefer a permitted channel they engage with (≥ 20% read/click). Never for mandatory events.
+routing:
+  engagementMinSamples: 20
+  ignoreBelowRate: 0.05
+  preferAboveRate: 0.2
 
 templates:
   supportedLocales: [en, hi, mr, ta, te]

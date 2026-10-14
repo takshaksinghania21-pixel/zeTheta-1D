@@ -22,17 +22,24 @@ const PATTERNS: [string, RegExp][] = [
 ];
 const ALLOW_FILES = [/^package-lock\.json$/, /^docs\/openapi\.json$/];
 
+// Fail closed: a scan that cannot list files must not report success.
 function files(): string[] {
+  let tracked: string[] = [];
   try {
-    const tracked = execFileSync('git', ['ls-files', '-co', '--exclude-standard'], {
+    tracked = execFileSync('git', ['ls-files', '-co', '--exclude-standard'], {
       encoding: 'utf8',
     })
       .split('\n')
       .filter(Boolean);
-    return tracked;
-  } catch {
-    return [];
+  } catch (err) {
+    console.error(`Secret scan could not list files (needs a git checkout): ${String(err)}`);
+    process.exit(2);
   }
+  if (tracked.length === 0) {
+    console.error('Secret scan found no files to check; refusing to report success.');
+    process.exit(2);
+  }
+  return tracked;
 }
 
 const findings: string[] = [];

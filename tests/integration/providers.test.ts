@@ -2,15 +2,15 @@ import { generateKeyPairSync, createVerify } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { SMTPServer } from 'smtp-server';
-import { FcmPushProvider } from '../../src/infrastructure/providers/fcm';
-import { Msg91SmsProvider } from '../../src/infrastructure/providers/msg91';
-import { SmtpEmailProvider, classifySmtpError } from '../../src/infrastructure/providers/smtp';
-import { mapTwilioStatus, TwilioSmsProvider } from '../../src/infrastructure/providers/twilio';
-import { WhatsAppCloudProvider } from '../../src/infrastructure/providers/whatsapp';
-import { ProviderError, type DeliveryRequest } from '../../src/modules/delivery/provider';
-import { buildProviders } from '../../src/modules/delivery/registry';
+import { FcmPushProvider } from '../../src/delivery/providers/fcm';
+import { Msg91SmsProvider } from '../../src/delivery/providers/msg91';
+import { SmtpEmailProvider, classifySmtpError } from '../../src/delivery/providers/smtp';
+import { mapTwilioStatus, TwilioSmsProvider } from '../../src/delivery/providers/twilio';
+import { WhatsAppCloudProvider } from '../../src/delivery/providers/whatsapp';
+import { ProviderError, type DeliveryRequest } from '../../src/delivery/providers/provider';
+import { buildProviders } from '../../src/delivery/providers/registry';
 import { loadPolicy } from '../../src/config/policy';
-import { InMemoryMockBehaviorStore } from '../../src/infrastructure/providers/mock';
+import { InMemoryMockBehaviorStore } from '../../src/delivery/providers/mock';
 import { testConfig } from '../helpers/env';
 
 interface Captured {
@@ -251,6 +251,7 @@ describe('FCM HTTP v1 adapter', () => {
     expect(sends[0]?.headers.authorization).toBe('Bearer ya29.test');
     expect(JSON.parse(sends[0]!.body).message.android.priority).toBe('high');
     expect(JSON.parse(sends[1]!.body).message.android.priority).toBe('normal');
+    expect(JSON.parse(sends[0]!.body).message.data.correlationId).toBe('corr-provider-1');
     await s.close();
   });
 
@@ -326,6 +327,7 @@ describe('WhatsApp Cloud API adapter', () => {
       messaging_product: 'whatsapp',
       to: '919812345678',
       type: 'text',
+      biz_opaque_callback_data: 'corr-provider-1',
     });
     await s.close();
   });

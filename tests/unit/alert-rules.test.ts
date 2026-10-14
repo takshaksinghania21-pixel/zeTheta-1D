@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
-import { registry } from '../../src/common/metrics';
+import { registry } from '../../src/utils/metrics';
 
 const file = path.resolve(__dirname, '../../config/prometheus-alerts.yml');
 const rules = (

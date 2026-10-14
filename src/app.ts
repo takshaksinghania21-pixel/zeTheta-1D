@@ -3,18 +3,18 @@ import cors from 'cors';
 import express, { type ErrorRequestHandler, type Express, type RequestHandler } from 'express';
 import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
-import { Api } from './api/http';
+import { Api } from './api/middleware/http';
 import { registerAuthAndEventRoutes } from './api/routes/auth-events';
 import { registerComplianceAndTemplateRoutes } from './api/routes/compliance-templates';
 import { registerNotificationRoutes } from './api/routes/notifications';
 import { registerOpsRoutes } from './api/routes/ops';
 import { registerUserRoutes } from './api/routes/users';
 import { registerWebhookRoutes } from './api/routes/webhooks';
-import { CORRELATION_HEADER, normaliseCorrelationId, runWithContext } from './common/context';
-import { AppError, RateLimitedError } from './common/errors';
-import { metrics, registry } from './common/metrics';
+import { CORRELATION_HEADER, normaliseCorrelationId, runWithContext } from './utils/context';
+import { AppError, RateLimitedError } from './utils/errors';
+import { metrics, registry } from './utils/metrics';
 import type { Container } from './container';
-import { pdfErrorBody } from './api/pdf-contract';
+import { pdfErrorBody } from './api/validators/pdf-contract';
 import { redisHealthy } from './infrastructure/redis/redis';
 
 export interface ReadinessCheck {

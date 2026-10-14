@@ -1,0 +1,398 @@
+{
+  "runAt": "2026-10-14T05:04:17.894Z",
+  "baseUrl": "http://localhost:3000",
+  "passed": 15,
+  "failed": 0,
+  "steps": [
+    {
+      "step": 1,
+      "name": "Create a synthetic test user",
+      "ok": true,
+      "detail": {
+        "status": 201,
+        "userId": "87d93a31-7630-4b60-a206-22a8e1bc2241"
+      },
+      "ms": 26
+    },
+    {
+      "step": 2,
+      "name": "Configure preferences (quiet hours off, push+email+in-app)",
+      "ok": true,
+      "detail": {
+        "version": 3,
+        "sources": {
+          "channels.sms": "USER",
+          "channels.email": "USER",
+          "channels.push": "USER",
+          "channels.whatsapp": "SYSTEM",
+          "channels.inapp": "USER",
+          "categories.TRANSACTION": "SYSTEM",
+          "categories.RISK": "SYSTEM",
+          "categories.SIP": "SYSTEM",
+          "categories.MARKET": "SYSTEM",
+          "categories.REGULATORY": "SYSTEM",
+          "digest": "SYSTEM",
+          "quietHours": "USER",
+          "timezone": "USER",
+          "locale": "SYSTEM"
+        }
+      },
+      "ms": 14
+    },
+    {
+      "step": 3,
+      "name": "Submit a valid financial event (202 Accepted)",
+      "ok": true,
+      "detail": {
+        "eventId": "b0592edd-d699-4a3f-8b13-8e190eb9badb",
+        "status": "ACCEPTED",
+        "idempotencyKey": "TXNX-001:87d93a31-7630-4b60-a206-22a8e1bc2241:SMOKE-9478d0c5-1",
+        "statusUrl": "/api/v1/events/b0592edd-d699-4a3f-8b13-8e190eb9badb"
+      },
+      "ms": 7
+    },
+    {
+      "step": 4,
+      "name": "Event processed asynchronously (Kafka → consumer)",
+      "ok": true,
+      "detail": {
+        "status": "PROCESSED",
+        "notifications": 4
+      },
+      "ms": 519
+    },
+    {
+      "step": 5,
+      "name": "Routing and compliance decisions recorded",
+      "ok": true,
+      "detail": {
+        "transactional": [
+          "sms:DND_NOT_APPLICABLE:ALLOW",
+          "push:CONSENT_IMPLIED:ALLOW",
+          "email:CONSENT_IMPLIED:ALLOW",
+          "sms:REGULATORY_MANDATORY_CHANNEL:OVERRIDE",
+          "sms:CONSENT_IMPLIED:ALLOW",
+          "-:FREQUENCY_CAP_EXEMPT:ALLOW",
+          "inapp:CONSENT_IMPLIED:ALLOW"
+        ],
+        "promotionalDryRun": [
+          "PROMOTIONAL_CONSENT_REQUIRED",
+          "CONSENT_IMPLIED"
+        ]
+      },
+      "ms": 14
+    },
+    {
+      "step": 6,
+      "name": "Templates rendered per channel (SMS forced by the SEBI mandate)",
+      "ok": true,
+      "detail": [
+        "push: Bought 10 INFY @ ₹1,520.50 on NSE. Order",
+        "email: Hi Smoke Tester,\n\nYour buy order SMOKE-9",
+        "inapp: Bought 10 INFY @ ₹1,520.50 on NSE. Order",
+        "sms: Bought 10 INFY @ Rs.1,520.50 on NSE. Ord"
+      ],
+      "ms": 0
+    },
+    {
+      "step": 7,
+      "name": "Mock providers received the delivery requests (SENT)",
+      "ok": true,
+      "detail": [
+        "push:DELIVERED:mock-push",
+        "email:DELIVERED:mock-email",
+        "inapp:SENT:socketio",
+        "sms:SENT:mock-sms-primary"
+      ],
+      "ms": 9
+    },
+    {
+      "step": 8,
+      "name": "Delivery status persisted (receipts → DELIVERED via signed webhook)",
+      "ok": true,
+      "detail": {
+        "states": [
+          "push:DELIVERED",
+          "email:DELIVERED",
+          "inapp:SENT",
+          "sms:DELIVERED"
+        ],
+        "delivery": {
+          "notificationId": "874b8986-8e76-400f-87db-a0bd4406a83b",
+          "state": "DELIVERED",
+          "provider": "mock-push",
+          "providerMessageId": "mock-push-3b69d757-c3ed-404c-be63-d9080663a82d",
+          "providerStatus": {
+            "status": "UNKNOWN"
+          },
+          "lastAttempt": {
+            "id": "0593b6dc-26d1-493c-b6a0-14113c8c05ac",
+            "attemptNumber": 1,
+            "provider": "mock-push",
+            "channel": "push",
+            "status": "SUCCESS",
+            "errorKind": null,
+            "errorCode": null,
+            "errorMessage": null,
+            "providerMessageId": "mock-push-3b69d757-c3ed-404c-be63-d9080663a82d",
+            "costMicros": 0,
+            "startedAt": "2026-10-14T05:02:51.470Z",
+            "completedAt": "2026-10-14T05:02:51.476Z",
+            "latencyMs": 1
+          }
+        }
+      },
+      "ms": 14
+    },
+    {
+      "step": 9,
+      "name": "State history recorded",
+      "ok": true,
+      "detail": "CREATED > ENRICHED > ROUTED > QUEUED > SENT > DELIVERED",
+      "ms": 4
+    },
+    {
+      "step": 10,
+      "name": "Simulate a provider failure (mock-push: 2 transient failures)",
+      "ok": true,
+      "detail": {
+        "simulate": {
+          "provider": "mock-push",
+          "mode": "fail_transient",
+          "remaining": 2
+        }
+      },
+      "ms": 8
+    },
+    {
+      "step": 11,
+      "name": "Retry with backoff recovers the delivery",
+      "ok": true,
+      "detail": {
+        "retryCount": 2,
+        "attempts": [
+          "FAILED:MOCK_503",
+          "FAILED:MOCK_503",
+          "SUCCESS:"
+        ],
+        "history": "CREATED>ENRICHED>ROUTED>QUEUED>RETRYING>RETRYING>SENT>DELIVERED"
+      },
+      "ms": 5628
+    },
+    {
+      "step": 12,
+      "name": "Exhaust retries → DLQ (mock-email failing permanently-transient, HIGH: 5 retries)",
+      "ok": true,
+      "detail": {
+        "state": "DLQ",
+        "retryCount": 5,
+        "dlq": {
+          "id": "c24d2831-036d-4997-9e8d-ad3caf515e54",
+          "source": "DELIVERY",
+          "notificationId": "471d11b5-9ba8-4057-9efd-9e4a4b492920",
+          "eventId": "d3867cb2-ed3b-41df-b992-0e62a68dae5a",
+          "channel": "email",
+          "reasonCode": "RETRIES_EXHAUSTED",
+          "reasonMessage": "Delivery failed after 5 retries: NO_PROVIDER_AVAILABLE",
+          "attempts": 5,
+          "retryHistory": [
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-14T05:02:57.545Z",
+              "attempt_number": 1
+            },
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-14T05:02:59.105Z",
+              "attempt_number": 2
+            },
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-14T05:03:02.112Z",
+              "attempt_number": 3
+            },
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-14T05:03:07.117Z",
+              "attempt_number": 4
+            },
+            {
+              "status": "FAILED",
+              "provider": "mock-email",
+              "error_code": "MOCK_503",
+              "error_kind": "TRANSIENT",
+              "started_at": "2026-10-14T05:03:16.131Z",
+              "attempt_number": 5
+            }
+          ],
+          "payload": {
+            "channel": "email",
+            "priority": "HIGH",
+            "createdAt": "2026-10-14T05:02:57.515Z",
+            "eventType": "TXNX-001",
+            "notificationId": "471d11b5-9ba8-4057-9efd-9e4a4b492920"
+          },
+          "status": "OPEN",
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "resolutionNote": null,
+          "createdAt": "2026-10-14T05:03:33.154Z",
+          "updatedAt": "2026-10-14T05:03:33.154Z",
+          "classification": "TRANSIENT"
+        }
+      },
+      "ms": 36408
+    },
+    {
+      "step": 13,
+      "name": "Authorised DLQ retry (operator) re-delivers; unauthorised discard rejected",
+      "ok": true,
+      "detail": {
+        "discardAsOperator": 403,
+        "retry": "RETRIED",
+        "finalState": "SENT"
+      },
+      "ms": 42492
+    },
+    {
+      "step": 14,
+      "name": "Analytics reflect the run (sent, delivered, retries, DLQ)",
+      "ok": true,
+      "detail": {
+        "delivery": [
+          {
+            "channel": "push",
+            "queued": 9,
+            "sent": 9,
+            "delivered": 9,
+            "failed": 0,
+            "dlq": 0,
+            "retries": 2,
+            "acceptanceRate": 1,
+            "deliveryRate": 1,
+            "failureRate": 0
+          },
+          {
+            "channel": "sms",
+            "queued": 9,
+            "sent": 9,
+            "delivered": 9,
+            "failed": 0,
+            "dlq": 0,
+            "retries": 0,
+            "acceptanceRate": 1,
+            "deliveryRate": 1,
+            "failureRate": 0
+          },
+          {
+            "channel": "inapp",
+            "queued": 3,
+            "sent": 3,
+            "delivered": 0,
+            "failed": 0,
+            "dlq": 0,
+            "retries": 0,
+            "acceptanceRate": 1,
+            "deliveryRate": 0,
+            "failureRate": 0
+          },
+          {
+            "channel": "email",
+            "queued": 4,
+            "sent": 3,
+            "delivered": 2,
+            "failed": 0,
+            "dlq": 1,
+            "retries": 6,
+            "acceptanceRate": 0.75,
+            "deliveryRate": 0.6667,
+            "failureRate": 0.25
+          }
+        ],
+        "latency": [
+          {
+            "channel": "email",
+            "samples": 3,
+            "sendLatencyMs": {
+              "p50": 164,
+              "p95": 70866.2,
+              "p99": 77150.84
+            },
+            "deliveryLatencyMs": {
+              "p50": 375.5,
+              "p95": 408.35,
+              "p99": 411.27
+            }
+          },
+          {
+            "channel": "inapp",
+            "samples": 3,
+            "sendLatencyMs": {
+              "p50": 86,
+              "p95": 92.3,
+              "p99": 92.86
+            },
+            "deliveryLatencyMs": {
+              "p50": null,
+              "p95": null,
+              "p99": null
+            }
+          },
+          {
+            "channel": "push",
+            "samples": 3,
+            "sendLatencyMs": {
+              "p50": 174,
+              "p95": 4654.2,
+              "p99": 5052.44
+            },
+            "deliveryLatencyMs": {
+              "p50": 356,
+              "p95": 4896.5,
+              "p99": 5300.1
+            }
+          },
+          {
+            "channel": "sms",
+            "samples": 3,
+            "sendLatencyMs": {
+              "p50": 84,
+              "p95": 152.4,
+              "p99": 158.48
+            },
+            "deliveryLatencyMs": {
+              "p50": 339,
+              "p95": 402,
+              "p99": 407.6
+            }
+          }
+        ]
+      },
+      "ms": 9
+    },
+    {
+      "step": 15,
+      "name": "Duplicate submission does not create duplicate notifications",
+      "ok": true,
+      "detail": {
+        "duplicate": 200,
+        "conflictingPayload": 409,
+        "before": 4,
+        "after": 4
+      },
+      "ms": 1518
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { loadPolicy } from '../../src/config/policy';
-import { channelsForEvent, resolvePreferences } from '../../src/modules/preferences/resolver';
-import { EventTaxonomy } from '../../src/modules/taxonomy/taxonomy';
+import { channelsForEvent, resolvePreferences } from '../../src/preferences/resolver';
+import { EventTaxonomy } from '../../src/events/models/taxonomy';
 
 const policy = loadPolicy();
 const taxonomy = EventTaxonomy.load();

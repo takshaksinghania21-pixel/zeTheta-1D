@@ -5,8 +5,8 @@ import amqp, {
   type ConsumeMessage,
   type Options,
 } from 'amqplib';
-import { CHANNELS, type Channel as NotifyChannel } from '../../domain/types';
-import type { Logger } from '../../common/logger';
+import { CHANNELS, type Channel as NotifyChannel } from '../../utils/types';
+import type { Logger } from '../../utils/logger';
 
 export interface RabbitTopology {
   deliveryExchange: string;
@@ -30,7 +30,7 @@ export const MAX_PRIORITY = 10;
  * Declares durable exchanges/queues (idempotent):
  *  - delivery (direct): one priority queue per channel, poison → DLX
  *  - dlx (direct) → delivery.dlq for exhausted/poison messages
- * Retry delays are scheduled in Redis (modules/retries/retry-scheduler.ts).
+ * Retry delays are scheduled in Redis (delivery/retry/retry-scheduler.ts).
  */
 export async function assertTopology(ch: Channel, t: RabbitTopology): Promise<void> {
   await ch.assertExchange(t.deliveryExchange, 'direct', { durable: true });

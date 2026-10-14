@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import type { Container } from '../../container';
-import { AppError, ForbiddenError, NotFoundError } from '../../common/errors';
-import { hasPermission } from '../../modules/auth/permissions';
-import { CHANNELS } from '../../domain/types';
+import { AppError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { hasPermission } from '../middleware/permissions';
+import { CHANNELS } from '../../utils/types';
 import { consumerLag } from '../../infrastructure/kafka/kafka';
 import { queueDepths } from '../../infrastructure/rabbitmq/rabbitmq';
-import { MOCK_MODES } from '../../infrastructure/providers/mock';
+import { MOCK_MODES } from '../../delivery/providers/mock';
 import { consumerGroups } from '../../workers/workers';
-import type { Api } from '../http';
-import { clientIp } from '../http';
+import type { Api } from '../middleware/http';
+import { clientIp } from '../middleware/http';
 import { camel } from '../mappers';
-import { ChannelEnum, UuidParam } from '../schemas';
+import { ChannelEnum, UuidParam } from '../validators/schemas';
 
 const DlqEntrySchema = z
   .object({
@@ -518,6 +518,24 @@ export function registerOpsRoutes(api: Api, c: Container): void {
     'Daily opt-outs by channel/category and the rolling 30-day rate (PDF Day 10)',
     () => c.analytics().optOutTrends(c.clock.now()),
   );
+  api.route({
+    method: 'get',
+    path: '/analytics/realtime',
+    operationId: 'getRealtimeCounters',
+    summary: 'Per-channel counts, cost and average delivery latency for the last N minutes (Redis)',
+    tags: ['Analytics'],
+    auth: { permission: 'analytics:read' },
+    query: z.strictObject({ minutes: z.coerce.number().int().min(1).max(120).default(5) }),
+    responses: { 200: { description: 'Counters', schema: z.record(z.string(), z.unknown()) } },
+    handler: async ({ query }) => ({
+      status: 200,
+      body: {
+        windowMinutes: query.minutes,
+        asOf: c.clock.now().toISOString(),
+        byChannel: await c.features().realtime(c.clock.now(), query.minutes),
+      },
+    }),
+  });
   analyticsRoute(
     'template-variants',
     'getTemplateVariants',

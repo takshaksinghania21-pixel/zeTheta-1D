@@ -1,9 +1,63 @@
 # Changelog
 
-All notable changes are documented here. Dates are real; this project was
-implemented in a single working session on 2026-10-11 (see
-docs/SUBMISSION.md for the mapping to the assignment's 15-day plan — work was
-not spread over 15 days and no backdated history was created).
+All notable changes are documented here. Dates are real: the project was built on
+2026-10-11 and audited against the assignment PDF and remediated on 2026-10-12
+(see docs/SUBMISSION.md for the mapping to the assignment's 15-day plan — work was
+not spread over 15 days and no backdated history was created). AI assistance
+(Claude Code) was used throughout; changes were checked against the PDF and
+the test suite, and anything not verified is labelled as such.
+
+## [1.1.0] — 2026-10-12 — PDF audit and remediation
+
+Full audit trail: docs/TRACEABILITY.md, docs/FINAL_GAP_ANALYSIS.md,
+docs/IMPLEMENTATION_STATUS.md.
+
+### Changed
+
+- Source tree moved to the PDF §E2 layout (`src/events`, `src/notifications`,
+  `src/delivery`, `src/templates`, `src/compliance`, `src/database`, `src/utils`…).
+- Taxonomy realigned with PDF §A2 / Appendix A (priorities, channels, latency
+  objectives, mandated channels); binary TRANSACTIONAL/PROMOTIONAL classes.
+- Kafka topics renamed to `notification-events`, `notification-critical`,
+  `notification-lifecycle`, `notification-dlq`; CRITICAL events have their own
+  topic, consumer group and Compose worker; manual offset commits.
+- Retries scheduled in a Redis ZSET (PDF Day 9) instead of RabbitMQ delay-band
+  queues; PostgreSQL `next_attempt_at` stays the durable record.
+- Metric names and the seven alerts follow PDF §A11 (`config/prometheus-alerts.yml`).
+- API accepts and returns the Appendix A snake_case contracts additively.
+- Compose follows Appendix C: Confluent Kafka 7.5 + ZooKeeper, `app` service,
+  PostgreSQL TLS, Redis dangerous commands disabled; Node 20 image < 200 MB.
+- Jest config in TypeScript; 80 % coverage enforced on all four metrics
+  (branches was 70 %).
+
+### Added
+
+- Routing priorities 3–4 (§A3.2): engagement-based channel choice, cost
+  optimisation, per-user daily/monthly budgets.
+- Redis feature store: real-time per-minute counters
+  (`GET /analytics/realtime`) and per-user channel engagement.
+- Capped notifications follow Appendix B: released in the next cap window, or
+  folded into a digest when three or more are waiting.
+- DND re-check at dispatch with stored evidence; DND violation gauge.
+- 20 % of each provider's quota reserved for CRITICAL traffic.
+- Storm de-duplication window for market alerts (§B2.4).
+- DLQ classification (transient / permanent / configuration).
+- k6 rate scenarios (normal, 10×, 20×, market crash, critical isolation),
+  EXPLAIN ANALYZE report, 1 000-user seed and dataset generator, sequence
+  diagrams, database schema and architecture docs.
+
+### Fixed
+
+- CRITICAL push p99 was 121 s behind bulk HIGH traffic (shared provider quota);
+  now 139 ms with the reserved quota.
+- Under 20× overload, 55 notifications were dead-lettered for our own local
+  rate limit; throttled-only attempts no longer spend the retry budget.
+- A poison DLQ message with a non-UUID id was requeued forever.
+- Quiet-hours release consumed one cap slot per channel instead of per event.
+- Digests skipped the dispatch-time DND/consent check and were classed SERVICE.
+- Capped notifications were dropped instead of rescheduled.
+- Storm de-duplication collisions returned 409 instead of a duplicate response.
+- k6 summaries exported the service token (`setup_data`); now stripped.
 
 ## [1.0.0] — 2026-10-11
 

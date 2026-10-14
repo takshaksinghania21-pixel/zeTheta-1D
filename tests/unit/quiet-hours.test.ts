@@ -3,7 +3,7 @@ import {
   nextDigestTime,
   quietWindowMinutes,
   validateQuietWindow,
-} from '../../src/modules/scheduling/quiet-hours';
+} from '../../src/compliance/quiet-hours/quiet-hours';
 
 const win = { enabled: true, start: '21:00', end: '08:00' };
 

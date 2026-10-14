@@ -1,19 +1,19 @@
 import type { Request } from 'express';
 import { z } from 'zod';
 import type { Container } from '../../container';
-import { AppError, UnauthenticatedError, ValidationError } from '../../common/errors';
-import { metrics } from '../../common/metrics';
-import { safeEqual } from '../../common/crypto';
-import { mapTwilioStatus } from '../../infrastructure/providers/twilio';
-import type { DeliveryReceipt, ReceiptStatus } from '../../modules/webhooks/service';
+import { AppError, UnauthenticatedError, ValidationError } from '../../utils/errors';
+import { metrics } from '../../utils/metrics';
+import { safeEqual } from '../../utils/crypto';
+import { mapTwilioStatus } from '../../delivery/providers/twilio';
+import type { DeliveryReceipt, ReceiptStatus } from '../../delivery/webhooks/service';
 import {
   verifyGeneric,
   verifyMeta,
   verifySharedSecret,
   verifyTwilio,
   type SignatureCheck,
-} from '../../modules/webhooks/signatures';
-import type { Api } from '../http';
+} from '../../delivery/webhooks/signatures';
+import type { Api } from '../middleware/http';
 
 const genericBody = z.strictObject({
   provider: z.string().min(1).max(64).optional(),

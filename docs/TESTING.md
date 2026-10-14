@@ -1,67 +1,78 @@
 # Test and Coverage Report
 
-Measured on 2026-10-11 (Apple M5, Node 26.8.2) against local PostgreSQL 16.15,
-Redis 8.10, Kafka 4.3.1 and RabbitMQ 4.3.6. Command:
+Measured on 2026-10-14 on **Node 20.19.6** (the assignment runtime) in a
+`node:20.19.6-alpine` container — clean `npm ci`, no `.env` — against
+`docker-compose.test.yml` (PostgreSQL 16.15 `zetheta_test`, Redis 7.4 DB 6 with
+per-run key prefixes, Kafka 4.3.1, RabbitMQ 4.3.6; tmpfs, throwaway credentials).
+This mirrors the CI `integration` job. Command:
 
 ```bash
-npm run test:coverage      # jest --runInBand --coverage (all three projects)
+npm run test:coverage      # jest --runInBand --coverage --forceExit (all three projects)
 ```
 
 ## 1. Results
 
 | Project                           | Suites | Tests   | Result                   |
 | --------------------------------- | ------ | ------- | ------------------------ |
-| unit (`tests/unit`)               | 11     | 157     | all passed               |
-| integration (`tests/integration`) | 8      | 130     | all passed               |
-| e2e (`tests/e2e`)                 | 1      | 6       | all passed               |
-| **Total**                         | **20** | **293** | **293 passed, 0 failed** |
+| unit (`tests/unit`)               | 12     | 198     | all passed               |
+| integration (`tests/integration`) | 10     | 175     | all passed               |
+| e2e (`tests/e2e`)                 | 1      | 13      | all passed               |
+| **Total**                         | **23** | **386** | **386 passed, 0 failed** |
 
-Evidence: `reports/test-suites.txt`, `reports/coverage-summary.json`.
+Evidence: `reports/test-suites-node20.txt` (summary + per-file coverage table),
+`reports/coverage-summary.json` (Node 20 run). The earlier host run on Node 26
+(379 tests, before the 7 e2e compliance flows were added) is in
+`reports/test-suites.txt`.
 
 ## 2. Coverage (all source files under `src/`)
 
-| Metric     | Measured                | Threshold (enforced in `jest.config.js`) |
+| Metric     | Measured                | Threshold (enforced in `jest.config.ts`) |
 | ---------- | ----------------------- | ---------------------------------------- |
-| Statements | **90.85 %** (3823/4208) | 80 %                                     |
-| Lines      | **93.56 %** (3549/3793) | 80 %                                     |
-| Functions  | **90.79 %** (789/869)   | 80 %                                     |
-| Branches   | **77.70 %** (1899/2444) | 70 %                                     |
+| Statements | **93.11 %** (4379/4703) | 80 %                                     |
+| Lines      | **95.62 %** (4023/4207) | 80 %                                     |
+| Functions  | **92.61 %** (941/1016)  | 80 %                                     |
+| Branches   | **81.06 %** (2337/2883) | 80 %                                     |
 
-Branch coverage is below the 80 % aspiration; it is enforced at 70 %. The
-lowest-covered areas are defensive branches in worker wiring
-(`src/workers/workers.ts`), configuration error paths and some route
-validation branches. Excluded from coverage: process entry points
-(`src/server.ts`, `src/workers/main.ts`, `migrate.ts` CLI), which are exercised
-by the smoke test and benchmark instead. The migration file reports 0 % because
-the test database is migrated by Knex outside Jest's instrumentation.
+All four metrics meet the PDF's 80 % target; the threshold was raised from 70 %
+to 80 % for branches during the audit, and Jest fails the run below it. Branch
+coverage has the least headroom (1.06 points). The lowest-covered areas are
+defensive branches in worker wiring (`src/workers/workers.ts`), broker adapters
+(`kafka.ts`, `rabbitmq.ts`) and some route validation branches. Excluded from
+coverage: process entry points (`src/server.ts`, `src/workers/main.ts`,
+`src/database/migrate.ts`, `src/database/seeds/seed.ts`), which are exercised by
+the smoke test, seeding and benchmark instead. The migration files report 0 %
+because the test database is migrated by Knex outside Jest's instrumentation.
 
 ## 3. What the suites cover
 
-| Suite                      | Focus                                                                                                                                                                                                                            |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| unit/taxonomy              | 25 events, schemas, unknown/malformed payloads, decimals, https URLs, idempotency keys, guard rails, config-only extension                                                                                                       |
-| unit/templates, unit/sms   | 625 renders (25 events × 5 locales × 5 channels), formatting, conditionals, locale fallback, missing variables, HTML escaping, header injection, template-injection rejection, prototype access, SMS segmentation                |
-| unit/preferences           | 4-layer hierarchy, sources, timezone fallback, regulatory override scope                                                                                                                                                         |
-| unit/quiet-hours           | windows across midnight, boundaries, DST (US spring/fall, UK), gap end times, digests                                                                                                                                            |
-| unit/compliance            | consent rules (implied/explicit/revoked/WhatsApp), DND statuses, staleness, failures, caching                                                                                                                                    |
-| unit/frequency-capper      | capper contract against the in-memory reference model                                                                                                                                                                            |
-| unit/routing               | engine decisions incl. edge cases 1, 2, 10, 11, 16, budgets, fallbacks, determinism                                                                                                                                              |
-| unit/backoff-circuit-state | retry formula & profiles, delay bands, circuit reducer, state machine                                                                                                                                                            |
-| unit/security-config       | production fail-safe config, PII masking, structured logs, crypto, signatures, RBAC matrix                                                                                                                                       |
-| integration/redis          | Lua capper contract on Redis, 50-way concurrency, TTLs, rate limiter, circuit Lua vs reference model, DND cache, mock store                                                                                                      |
-| integration/brokers        | Kafka topics/ordering/headers/offsets, RabbitMQ priority, delay-band routing + dead-lettering, poison → DLQ, outbox relay incl. outage and SKIP LOCKED concurrency                                                               |
-| integration/persistence    | encryption at rest, optimistic concurrency, consent ledger, partitions, dedupe keys, atomic transitions, keyset pagination                                                                                                       |
-| integration/delivery       | event processor + dispatcher: failover, retries, permanent failures, fallback, DLQ retry/discard, circuit, rate limits, timeouts, crash recovery, preference changes, receipts                                                   |
-| integration/races          | ack/receipt before SENT commit (regression tests for bugs found in e2e)                                                                                                                                                          |
-| integration/providers      | Twilio, MSG91, FCM (real RSA-signed JWT), WhatsApp against HTTP stubs; Nodemailer against a real local SMTP server; fail-safe provider factory                                                                                   |
-| integration/api            | health, metrics, OpenAPI completeness, headers, CORS, auth flows, RBAC, ingestion semantics, preferences, consent, compliance, templates, webhook signatures, anonymisation, retention, ops                                      |
-| integration/scheduler      | quiet release, morning digest, cap re-check, crash recovery, DST scheduling, bypass audit, digest suggestion, sweeper                                                                                                            |
-| integration/analytics      | exactly-once aggregation, rates, costs, engagement nulls, opt-out rate, Socket.IO auth                                                                                                                                           |
-| e2e/pipeline               | full stack with all workers: HTTP → Kafka → RabbitMQ → providers → signed receipts → Socket.IO ack/read/click → analytics (< 30 s lag), mandatory override, failover, DLQ round trip, crash/outage recovery, duplicate ingestion |
+| Suite                               | Focus                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unit/taxonomy                       | 25 events, schemas, unknown/malformed payloads, decimals, https URLs, idempotency keys, guard rails, config-only extension                                                                                                                                                                                                                                                                      |
+| unit/templates, unit/sms            | 625 renders (25 events × 5 locales × 5 channels), formatting, conditionals, locale fallback, missing variables, HTML escaping, header injection, template-injection rejection, prototype access, SMS segmentation                                                                                                                                                                               |
+| unit/preferences                    | 4-layer hierarchy, sources, timezone fallback, regulatory override scope                                                                                                                                                                                                                                                                                                                        |
+| unit/quiet-hours                    | windows across midnight, boundaries, DST (US spring/fall, UK), gap end times, digests                                                                                                                                                                                                                                                                                                           |
+| unit/compliance                     | consent rules (implied/explicit/revoked/WhatsApp), DND statuses, staleness, failures, caching                                                                                                                                                                                                                                                                                                   |
+| unit/frequency-capper               | capper contract against the in-memory reference model                                                                                                                                                                                                                                                                                                                                           |
+| unit/routing                        | engine decisions incl. edge cases 1, 2, 10, 11, 16, §A3.2 priorities 1–4 (engagement, cost, per-user budgets), fallbacks, determinism                                                                                                                                                                                                                                                           |
+| unit/backoff-circuit-state          | retry formula & profiles, circuit reducer (windowed failures), state machine                                                                                                                                                                                                                                                                                                                    |
+| unit/security-config                | production fail-safe config, PII masking, structured logs, crypto, signatures, RBAC matrix                                                                                                                                                                                                                                                                                                      |
+| unit/alert-rules                    | the seven §A11.2 alerts exist with the PDF metric names and thresholds                                                                                                                                                                                                                                                                                                                          |
+| unit/datasets                       | synthetic dataset generator: sizes, distributions, determinism                                                                                                                                                                                                                                                                                                                                  |
+| integration/redis                   | Lua capper contract on Redis, 50-way concurrency, TTLs, rate limiter, circuit Lua vs reference model, DND cache, mock store, feature store                                                                                                                                                                                                                                                      |
+| integration/brokers                 | Kafka topics/ordering/headers/manual offsets, RabbitMQ priority + dead-lettering, Redis ZSET retries, poison → DLQ, outbox relay incl. outage and SKIP LOCKED concurrency                                                                                                                                                                                                                       |
+| integration/persistence             | encryption at rest, optimistic concurrency, consent ledger, partitions, dedupe keys, atomic transitions, keyset pagination                                                                                                                                                                                                                                                                      |
+| integration/delivery                | event processor + dispatcher: failover, retries, permanent failures, fallback, DLQ retry/discard, circuit, rate limits, CRITICAL quota reserve, throttling without retry spend, timeouts, crash recovery, preference changes, DND at dispatch, receipts                                                                                                                                         |
+| integration/races                   | ack/receipt before SENT commit (regression tests for bugs found in e2e)                                                                                                                                                                                                                                                                                                                         |
+| integration/providers               | Twilio, MSG91, FCM (real RSA-signed JWT), WhatsApp against HTTP stubs; Nodemailer against a real local SMTP server; fail-safe provider factory                                                                                                                                                                                                                                                  |
+| integration/api                     | health, metrics, OpenAPI completeness, headers, CORS, auth flows, RBAC, ingestion semantics, preferences, consent, compliance, templates, webhook signatures, anonymisation, retention, ops                                                                                                                                                                                                     |
+| integration/scheduler               | quiet release, morning digest, cap re-check, capped → next window / digest (3+), digest DND, crash recovery, DST, bypass audit, sweeper                                                                                                                                                                                                                                                         |
+| integration/analytics               | exactly-once aggregation, rates, costs, engagement nulls, opt-out rate, Socket.IO auth                                                                                                                                                                                                                                                                                                          |
+| integration/users-notifications-api | Appendix A snake_case contracts: users, preferences, notification list/detail, pagination, access control                                                                                                                                                                                                                                                                                       |
+| e2e/pipeline                        | full stack with all workers: HTTP → Kafka → RabbitMQ → providers → signed receipts → Socket.IO ack/read/click → analytics (< 30 s lag), mandatory override, failover, DLQ round trip, crash/outage recovery, duplicate ingestion; compliance flows: quiet hours, CRITICAL bypass audit, DND block, mandatory margin call to a DND number, category cap, Redis ZSET retry, analytics consistency |
 
-**DND, frequency capping and quiet hours** (assignment minimum: 25 tests):
-68 executed tests — quiet-hours unit 13, DND unit 10, capper contract 12 × 2
-implementations, capper extras 3, scheduler 9, routing engine 9.
+**DND, frequency capping and quiet hours** (assignment minimum: 25 tests): at
+least 79 executed tests — quiet-hours unit 13, DND unit 10, capper contract
+12 × 2 implementations, scheduler 12, routing engine 10, delivery 5, e2e 5.
 
 ## 4. Mandatory edge cases
 
@@ -114,11 +125,22 @@ asynchronous processing, decisions, templates, provider delivery, receipts,
 history, simulated failure + retry, retry exhaustion → DLQ, authorised DLQ
 retry and unauthorised discard, analytics, duplicate suppression).
 
+The same smoke test against the **Docker Compose deployment** (separate API, worker
+containers, TLS PostgreSQL): **15/15**, run three times (fresh stack, after
+`stop`/`start`, after `down`/`up`) — `reports/smoke-test-docker.json`. Seven extra
+checks against the containers (Redis ZSET retry, quiet hours, CRITICAL bypass, DND,
+mandatory margin call to a DND number, category cap, analytics) passed 7/7 —
+`reports/docker-functional.json`; the same seven flows are now automated in
+`tests/e2e/pipeline.test.ts` ("compliance and delivery flows"). Smoke re-run
+against the rebuilt image on 2026-10-14: 15/15.
+
 ## 7. Known test-environment caveats
 
 - Integration/e2e tests must run in-band (shared `zetheta_test` database).
 - Jest is invoked with `--forceExit` for integration/e2e because kafkajs and
   ioredis keep sockets in their reconnect timers after `disconnect()`; all
   suites pass before exit.
-- Tests ran on Node 26; CI is configured for Node 20.19.6 but has not been
-  executed.
+- The numbers above are from Node 26 on the host. The same suite also passed on
+  Node 20.19.6 in a `node:20.19.6-alpine` container (clean `npm ci`, no `.env`)
+  against `docker-compose.test.yml`: 23/23 suites, 379/379 tests, branches 80.67 %
+  (`reports/test-suites-node20.txt`). CI itself has not run.

@@ -1,0 +1,21 @@
+scenario=market_crash duration=120s scale=1 since=2026-10-12T07:52:31.000Z ingest_s=120 drained_s=120 pending_at_end=0
+http_req_duration
+http_req_failed
+events_accepted................: 32162 267.948123/s
+http_req_duration..............: avg=1.34ms min=428µs    med=1.27ms p(90)=1.89ms p(95)=2.33ms p(99)=3.79ms max=26.47ms
+http_req_failed................: 0.00% 0 out of 32163
+iterations.....................: 32162 267.948123/s
+ event_type | events | processed | proc_p50_ms | proc_p95_ms | proc_p99_ms 
+------------+--------+-----------+-------------+-------------+-------------
+ MKTX-001   |   2392 |      2392 |          63 |         221 |         258
+ RISK-001   |   1920 |      1920 |          97 |         203 |         216
+ RISK-003   |    241 |       241 |         116 |         216 |         225
+
+ priority | channel | notifications | sent | capped | e2e_p50_ms | e2e_p95_ms | e2e_p99_ms 
+----------+---------+---------------+------+--------+------------+------------+------------
+ CRITICAL | email   |           241 |  241 |      0 |        127 |        225 |        237
+ CRITICAL | inapp   |          2161 | 2161 |      0 |        108 |        216 |        232
+ CRITICAL | push    |          2161 | 2161 |      0 |        108 |        216 |        231
+ HIGH     | inapp   |          2392 | 2392 |      0 |         69 |        226 |        265
+ HIGH     | push    |          1679 |    0 |   1679 |            |            |           
+

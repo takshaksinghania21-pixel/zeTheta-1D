@@ -1,0 +1,107 @@
+{
+  "at": "2026-10-12T12:47:59.751Z",
+  "base": "http://localhost:3000",
+  "results": [
+    {
+      "check": "Redis ZSET retry: transient failure scheduled in zetheta.retry:schedule, then delivered",
+      "ok": true,
+      "detail": {
+        "simulate": 200,
+        "zsetMaxMembers": 1,
+        "memberIsNotification": true,
+        "scoreIsEpochMs": true,
+        "path": "CREATED>ENRICHED>ROUTED>QUEUED>RETRYING>SENT>DELIVERED",
+        "dueInMsAtObservation": -1390
+      }
+    },
+    {
+      "check": "Quiet hours defer intrusive channels (TXNX-005, 21:00–08:00 Australia/Sydney)",
+      "ok": true,
+      "detail": {
+        "localHour": 23,
+        "states": [
+          "inapp:SENT",
+          "push:QUIET",
+          "sms:QUIET"
+        ],
+        "rules": [
+          "sms:QUIET_HOURS_DEFER:DEFER",
+          "push:QUIET_HOURS_DEFER:DEFER"
+        ]
+      }
+    },
+    {
+      "check": "CRITICAL RISK-001 bypasses quiet hours, bypass recorded, sent on SMS+push",
+      "ok": true,
+      "detail": {
+        "states": [
+          "inapp:SENT",
+          "push:SENT",
+          "sms:SENT"
+        ],
+        "bypass": [
+          "sms:QUIET_HOURS_BYPASS:BYPASS",
+          "push:QUIET_HOURS_BYPASS:BYPASS"
+        ]
+      }
+    },
+    {
+      "check": "DND blocks promotional SMS (SIPX-004) to a FULLY_BLOCKED number",
+      "ok": true,
+      "detail": {
+        "import": 201,
+        "states": [
+          "inapp:SENT",
+          "sms:DND"
+        ],
+        "smsRules": [
+          "sms:CONSENT_EXPLICIT:ALLOW",
+          "sms:DND_FULLY_BLOCKED:BLOCK"
+        ]
+      }
+    },
+    {
+      "check": "Mandatory transactional margin call still reaches the DND-registered number by SMS",
+      "ok": true,
+      "detail": {
+        "states": [
+          "inapp:SENT",
+          "push:DELIVERED",
+          "sms:DELIVERED"
+        ],
+        "smsRules": [
+          "sms:DND_NOT_APPLICABLE:ALLOW",
+          "sms:CONSENT_IMPLIED:ALLOW"
+        ]
+      }
+    },
+    {
+      "check": "Frequency cap: 4th MARKET alert within the hour is CAPPED (3/category/hour)",
+      "ok": true,
+      "detail": {
+        "fourth": [
+          "inapp:SENT",
+          "push:CAPPED",
+          "sms:CAPPED"
+        ],
+        "capRules": [
+          "push:FREQUENCY_CAP_CATEGORY:CAP",
+          "sms:FREQUENCY_CAP_CATEGORY:CAP"
+        ]
+      }
+    },
+    {
+      "check": "Analytics: real-time Redis counters and delivery rates respond with data",
+      "ok": true,
+      "detail": {
+        "realtime": 200,
+        "channels": [
+          "windowMinutes",
+          "asOf",
+          "byChannel"
+        ],
+        "deliveryRates": 200
+      }
+    }
+  ]
+}

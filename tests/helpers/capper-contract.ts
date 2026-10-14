@@ -1,4 +1,7 @@
-import type { CapRequest, FrequencyCapper } from '../../src/modules/frequency/frequency-capper';
+import type {
+  CapRequest,
+  FrequencyCapper,
+} from '../../src/compliance/frequency-cap/frequency-capper';
 
 /**
  * Behavioural contract shared by the in-memory and Redis cappers. Each test uses
